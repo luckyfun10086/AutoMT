@@ -17,7 +17,9 @@ missing_wordy.json
 __pycache__/
 *.pyc
 
-# PyInstaller 构建产物（成品 AutoMT.exe 在根目录，正常入库）
+# PyInstaller 构建产物（成品通过 GitHub Releases 发布，不入库）
 build/
 dist/
 *.spec
+AutoMT.exe
+*.exe
