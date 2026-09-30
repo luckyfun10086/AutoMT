@@ -4,7 +4,10 @@
 
 把 MTool 导出的 `ManualTransFile.json`（`{"原文": "译文"}` 键值对，未翻条目译文为空）
 全自动机翻成中文。默认走内置免费端点（公开、无需密钥）；也可在界面里填入**你自己的
-翻译接口 URL 和 API Key**（保存在本机 `.env`，绝不入库）。
+翻译接口 URL 和 API Key**（保存在本机 `.env`，绝不入库）。不用 MTool？见下方
+[独立 RPG Maker 提取](#独立-rpg-maker-提取无需-mtool)。
+
+> [MTool](https://mtool.app/) —— 本项目为之打造的游戏翻译修改工具（非开源，官网 mtool.app）。
 
 已在 7 万+条游戏文本上实弹验证。
 
@@ -80,6 +83,26 @@ Bob               不写 = 号则保持英文原样
 持久化）；命令行用 `--no-auto-names` 或 `.env` 里 `MT_AUTO_NAMES=0`。关闭后人名按
 普通文本交由机翻（更自然的译名，但一致性不保证），names.txt 人工词条在任何模式下都生效。
 
+## 独立 RPG Maker 提取（无需 MTool）
+
+RPG Maker MV/MZ 的全部文本都在游戏目录 `data/*.json` 里（MV 为 `www/data`），
+AutoMT 可直接提取与回写，全程无需第三方工具：
+
+```
+python rpg_extract.py <游戏目录>      # → game.extracted.json
+python mt_clean.py game.extracted.json  # ① 掩码
+python mt_translate.py                  # ② 机翻（断点可续）
+python mt_apply.py game.extracted.json  # ③ 还原 → game.extracted_translated.json
+python rpg_apply.py <游戏目录> game.extracted_translated.json   # 回写游戏
+```
+
+提取范围：对话（401，连续行自动合并成整段，翻译质量更好）、滚动文本（405）、
+选项（102）、角色改名（320/324）、地图显示名 —— 覆盖 `Map*.json`、
+`CommonEvents.json`、`Troops.json`。
+
+安全机制：回写前自动备份原文件到 `data_backup/`；只替换完全匹配的文本块；
+译文行数与原文不齐的一律跳过保持原文——**坏翻译绝不会损坏游戏**。
+
 ## 命令行三步流程（与 GUI 等价）
 
 ```
@@ -123,8 +146,9 @@ python mt_apply.py [文件]   ③ 还原回填：校验+清理 → 输出 transl
 - `mt_gui.py` — 上位机（兼 PyInstaller 打包入口）
 - `mt_clean.py / mt_translate.py / mt_apply.py` — 命令行三步
 - `mt_config.py` — 配置层（.env 读写/URL构建/响应解析/人名识别）
+- `rpg_extract.py / rpg_apply.py` — RPG Maker MV/MZ 独立提取与回写
 - `names.example.txt` — 人名表模板
-- `_test_custom.py / _test_autonames.py` — 自测（模拟API、四语言识别）
+- `_test_custom.py / _test_autonames.py / _test_rpg.py` — 自测（模拟API、四语言识别、提取回写全链路）
 
 ## 许可证
 

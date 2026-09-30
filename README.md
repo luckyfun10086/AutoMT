@@ -6,6 +6,10 @@ Auto-translates MTool-exported `ManualTransFile.json` files (a `{"source": "tran
 map where untranslated entries have empty values). Uses a free public translation endpoint
 by default — **no API key, no quota, no content filtering**. Alternatively, plug in your
 own translation API via the GUI (credentials stored in a local `.env`, never committed).
+Don't use MTool? See [Standalone RPG Maker extraction](#standalone-rpg-maker-extraction-no-mtool-needed) below.
+
+> [MTool](https://mtool.app/) — the excellent game translation & modification tool this
+> project was built for (closed-source, official site: mtool.app).
 
 Validated on a 70,000+ string game text corpus.
 
@@ -91,6 +95,27 @@ or use `--no-auto-names` / `MT_AUTO_NAMES=0`. Names are then machine-translated 
 other text (more natural renderings, consistency not guaranteed). Manual names.txt entries
 work in every mode.
 
+## Standalone RPG Maker Extraction (no MTool needed)
+
+RPG Maker MV/MZ games keep all text in `data/*.json` (`www/data` for MV) — AutoMT can
+extract and patch it directly, no third-party tool required:
+
+```
+python rpg_extract.py <game-folder>     # → game.extracted.json
+python mt_clean.py game.extracted.json  # ① mask
+python mt_translate.py                  # ② translate (resumable)
+python mt_apply.py game.extracted.json  # ③ restore → game.extracted_translated.json
+python rpg_apply.py <game-folder> game.extracted_translated.json   # write back
+```
+
+What gets extracted: dialogue (code 401, consecutive lines merged into one block for
+better quality), scrolling text (405), choices (102), actor name/nickname changes
+(320/324), map display names — from `Map*.json`, `CommonEvents.json`, `Troops.json`.
+
+Safety: `rpg_apply.py` backs up originals to `data_backup/` first, only replaces
+exact-match blocks, and skips any block whose translated line count doesn't match —
+the game can never be corrupted by a bad translation.
+
 ## CLI (equivalent to the GUI)
 
 ```
@@ -135,8 +160,10 @@ lost). Defaults to `ManualTransFile.json` in the current directory.
 - `mt_gui.py` — GUI (also the PyInstaller entry point)
 - `mt_clean.py` / `mt_translate.py` / `mt_apply.py` — the three CLI stages
 - `mt_config.py` — config layer (.env I/O, URL building, response parsing, name detection)
+- `rpg_extract.py` / `rpg_apply.py` — standalone RPG Maker MV/MZ extraction & write-back
 - `names.example.txt` — names.txt template
-- `_test_custom.py` / `_test_autonames.py` — self-tests (mock API, 4-language detection)
+- `_test_custom.py` / `_test_autonames.py` / `_test_rpg.py` — self-tests (mock API,
+  4-language detection, extract/apply round-trip)
 
 ## License
 
