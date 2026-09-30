@@ -686,6 +686,10 @@ class App:
             if ok:
                 extract = mt_config.ENGINE_EXTRACTORS.get(eng)
                 if extract:
+                    # Unity 引擎需检查 UnityPy
+                    if eng == "unity":
+                        if not self._check_and_install_unitypy():
+                            return
                     if messagebox.askyesno(
                             f"✅ {name}",
                             f"检测到 {name}，是否自动提取文本？\n\n"
@@ -699,6 +703,36 @@ class App:
                 self.log(f"[engine] {name}: 不支持 — {reason}")
                 return
         self.set_file(path)
+
+    def _check_and_install_unitypy(self):
+        """检测 UnityPy；缺失时弹窗询问是否自动安装。返回 True=可用。"""
+        if mt_config.check_unitypy():
+            return True    # 已安装（或系统路径中找到）
+        # 弹窗
+        answer = messagebox.askyesno(
+            "UnityPy Required / 需要安装 UnityPy",
+            "Unity 引擎文本提取需要 UnityPy 库（当前未检测到）。\n"
+            "Unity text extraction requires the UnityPy library (not found).\n\n"
+            "是否自动安装？（需要 Python 和 pip，约 50MB）\n"
+            "Install automatically? (requires Python & pip, ~50MB)")
+        if not answer:
+            self.log("[unity] 用户取消安装 UnityPy")
+            return False
+        self.log("[unity] 正在安装 UnityPy…（可能需要 1-3 分钟）")
+        self.stage_var.set("Installing UnityPy…")
+        self.bar["value"] = 10
+        self.root.update()
+        ok, msg = mt_config.install_unitypy()
+        if ok:
+            self.log("[unity] UnityPy 安装成功 ✓")
+            self.stage_var.set("UnityPy installed ✓")
+            return True
+        self.log(f"[unity] 安装失败: {msg}")
+        messagebox.showerror(
+            "Install Failed / 安装失败",
+            f"UnityPy 安装失败:\n{msg}\n\n"
+            "请手动运行 / Please run manually:\n  pip install UnityPy")
+        return False
 
     def _run_extractor(self, game_path, script):
         """在线程中 import 提取脚本并调用 main()——避免 subprocess 在打包 exe 里打开新窗口"""

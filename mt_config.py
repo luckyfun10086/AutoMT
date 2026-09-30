@@ -169,6 +169,43 @@ ENGINE_EXTRACTORS = {
     "unity": "unity_extract.py",
 }
 
+# ---------- UnityPy 检测与安装（GUI 用；不在此 import UnityPy 以免 PyInstaller 打包） ----------
+def check_unitypy():
+    """检测 UnityPy 是否可用（含系统 site-packages 补找）。返回 True/False。"""
+    import importlib.util
+    if importlib.util.find_spec("UnityPy") is not None:
+        return True
+    # 补找系统安装路径（打包 exe 不含 pip 包路径）
+    import site as _site
+    paths = list(_site.getsitepackages()) if hasattr(_site, 'getsitepackages') else []
+    usp = _site.getusersitepackages()
+    if usp:
+        paths.append(usp)
+    for sp in paths:
+        if os.path.isdir(sp) and os.path.exists(os.path.join(sp, "UnityPy")):
+            sys.path.insert(0, sp)
+            if importlib.util.find_spec("UnityPy") is not None:
+                return True
+    return False
+
+def install_unitypy():
+    """pip install UnityPy。返回 (成功, 信息)。"""
+    import subprocess
+    for cmd in ([sys.executable if not getattr(sys, 'frozen', False) else "python",
+                 "-m", "pip", "install", "UnityPy"],
+                ["pip", "install", "UnityPy"]):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", timeout=300)
+            if r.returncode == 0:
+                return True, (r.stdout or "")[-200:]
+            last_err = (r.stderr or r.stdout or "pip failed")[-200:]
+        except FileNotFoundError:
+            last_err = "python/pip not found"
+        except Exception as e:
+            last_err = str(e)
+    return False, last_err
+
 def base_dir():
     """exe 旁边（PyInstaller 打包后 __file__ 在临时目录，须用 exe 自身位置）"""
     if getattr(sys, "frozen", False):
