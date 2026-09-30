@@ -19,6 +19,12 @@ Grab `AutoMT.exe` from the [**Releases**](https://github.com/luckyfun10086/AutoM
 page — a standalone Windows binary, no Python required. Everything (`.env`, `names.txt`,
 `mt_work/`) is created next to the exe.
 
+> **Quality & fair use**: the built-in free endpoint delivers basic machine-translation
+> quality — fine for understanding a game, not for polished prose. For better results,
+> configure a DeepL/LLM endpoint in the API panel below. The free endpoint is unofficial
+> and may change or rate-limit at any time; if it ever does, the tool keeps working with
+> any custom endpoint. Translate only content you have the right to use.
+
 ## GUI (recommended)
 
 1. Pick **source → target language** at the top (English → Simplified Chinese by default)
