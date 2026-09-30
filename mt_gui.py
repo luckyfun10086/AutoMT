@@ -583,6 +583,9 @@ class App:
             st.configure("Treeview.Heading", font=(self.lang_font[0], 9, "bold"))
         st.configure("TCombobox", padding=(4, 3))
         st.configure("TNotebook.Tab", padding=(14, 6))
+        # 标题类命名样式：主题切换时随调色板重着色（行内 foreground 不会跟着变）
+        st.configure("Title.TLabel", background=pal["bg"], foreground=pal["fg"])
+        st.configure("CardTitle.TLabel", background=pal["bg"], foreground=pal["fg"])
 
     def _apply_widget_colors(self):
         """tk 原生控件（非 ttk）按主题着色；在 _build 之后调用"""
@@ -626,8 +629,8 @@ class App:
         head = ttk.Frame(self.root, padding=(14, 10, 14, 0))
         head.pack(fill="x")
         ttk.Label(head, text=self.T("title"),
-                  font=("Microsoft YaHei UI", 13, "bold"),
-                  foreground=self.pal["fg"]).pack(side="left")
+                  style="Title.TLabel",
+                  font=("Microsoft YaHei UI", 13, "bold")).pack(side="left")
         self.lang_btn = tk.Button(head, text=self.T("lang_btn"), command=self.toggle_lang,
                                   relief="flat", bg=self.pal["btn_bg"], fg=self.pal["btn_fg"],
                                   activebackground=self.pal["btn_active"], padx=12, pady=2,
@@ -714,8 +717,8 @@ class App:
         t2 = ttk.Frame(self.nb, padding=10)
         self.nb.add(t2, text=self.T("tab_game"))
         ttk.Label(t2, text=self.T("g_title"),
-                  font=("Microsoft YaHei UI", 11, "bold"),
-                  foreground=self.pal["fg"]).pack(anchor="w")
+                  style="CardTitle.TLabel",
+                  font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w")
         self.g_hint_lbl = ttk.Label(t2, text=self.T("g_drop") + "\n" + self.T("g_steps"),
                                     style="Hint.TLabel", wraplength=760, justify="left")
         self.g_hint_lbl.pack(anchor="w", pady=(2, 8))
