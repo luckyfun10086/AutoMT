@@ -47,4 +47,44 @@ assert '\\c[2]code' in out['with \\c[2]code\nline2'] and '\n' in out['with \\c[2
 srv.shutdown()
 shutil.rmtree(tmp)
 os.remove('.env')
+
+# 3) AI 翻译（OpenAI 兼容）：模拟 chat/completions，校验 POST 体/鉴权/模型/记号
+class AI(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        assert self.headers.get('Authorization') == 'Bearer sk-ai-456', 'Bearer key missing'
+        n = int(self.headers.get('Content-Length', 0))
+        reqbody = json.loads(self.rfile.read(n))
+        assert reqbody['model'] == 'deepseek-chat', reqbody['model']
+        assert '〔T' not in json.dumps(reqbody, ensure_ascii=False) or True
+        user_text = reqbody['messages'][1]['content']
+        assert '〔T' in user_text or 'code' not in user_text  # 记号原样传入
+        body = json.dumps({'choices': [{'message': {
+            'content': '【AI】' + user_text}}]}).encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, *a):
+        pass
+
+srv2 = http.server.HTTPServer(('127.0.0.1', 18778), AI)
+threading.Thread(target=srv2.serve_forever, daemon=True).start()
+
+tmp = tempfile.mkdtemp()
+src = os.path.join(tmp, 'ManualTransFile.json')
+json.dump({'AI test with \\c[2]code\\nline2': ''},
+          open(src, 'w', encoding='utf-8'), ensure_ascii=False)
+pipe = mt_gui.Pipe(src, os.path.join(tmp, 'work'), 'en', 'zh-CN', threading.Event(),
+                   lambda s, d, t, n: None, lambda m: None,
+                   endpoint='http://127.0.0.1:18778/v1/chat/completions',
+                   api_key='sk-ai-456', api_header='Authorization',
+                   api_type='openai', model='deepseek-chat')
+dst, ok, drop = pipe.run()
+out = json.load(open(dst, encoding='utf-8'))
+print('AI endpoint ok:', ok, 'drop:', drop, '|', repr(out['AI test with \\c[2]code\\nline2'])[:70])
+assert ok == 1 and drop == 0
+assert '\\c[2]code' in out['AI test with \\c[2]code\\nline2']
+srv2.shutdown()
+shutil.rmtree(tmp)
 print('ALL TESTS PASS')

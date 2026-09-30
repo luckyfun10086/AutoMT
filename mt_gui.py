@@ -33,7 +33,7 @@ S = {
         "api_frame": "翻译接口（个人配置，保存到本机 .env，不会上传）",
         "url": "URL:", "key": "Key:", "header": "请求头:",
         "save_env": "保存到 .env",
-        "api_hint": "URL 用 {sl}/{tl}/{q} 占位符；留默认=免费端点（无需Key）。自定义接口逐条请求。",
+        "api_hint": "MT·GET：URL 用 {sl}/{tl}/{q} 占位符，留默认=免费端点 | AI·OpenAI：URL 填 chat/completions 地址+模型名，支持 DeepSeek/Kimi/GLM/OpenRouter/Ollama 等",
         "drop": "把 ManualTransFile.json 拖到这里\n（或点击选择文件）",
         "drop_nodnd": "\n（提示：pip install tkinterdnd2 可启用拖拽）",
         "start": "开始翻译", "cancel": "取消", "open_out": "打开输出文件夹",
@@ -71,7 +71,7 @@ S = {
         "api_frame": "Translation API (personal config, saved to local .env, never uploaded)",
         "url": "URL:", "key": "Key:", "header": "Header:",
         "save_env": "Save to .env",
-        "api_hint": "URL uses {sl}/{tl}/{q} placeholders; default = free endpoint (no key). Custom APIs are queried one-by-one.",
+        "api_hint": "MT·GET: URL with {sl}/{tl}/{q} placeholders, default = free endpoint | AI·OpenAI: full chat/completions URL + model (DeepSeek/Kimi/GLM/OpenRouter/Ollama…)",
         "drop": "Drop ManualTransFile.json here\n(or click to browse)",
         "drop_nodnd": "\n(tip: pip install tkinterdnd2 enables drag & drop)",
         "start": "Start", "cancel": "Cancel", "open_out": "Open output folder",
@@ -132,9 +132,14 @@ class Cancel(Exception):
 class Pipe:
     """三段式管线；cb(stage, done, total, note)；log(msg)"""
     def __init__(self, src_json, workdir, sl, tl, cancel, cb, log,
-                 endpoint=None, api_key=None, api_header=None, auto_names=True, lang="zh"):
+                 endpoint=None, api_key=None, api_header=None, auto_names=True, lang="zh",
+                 api_type="get", model=None):
         self.src, self.work, self.sl, self.tl = src_json, workdir, sl, tl
         self.cancel, self.cb, self.log = cancel, cb, log
+        self.api_type = api_type
+        self.model = model
+        self.api_key = api_key
+        self.api_header = api_header
         self.endpoint = (endpoint or "").strip() or mt_config.DEFAULT_ENDPOINT
         self.headers = mt_config.build_headers(api_key, api_header)
         self.auto_names = auto_names
@@ -237,8 +242,10 @@ class Pipe:
             if self.cancel.is_set():
                 raise Cancel()
             try:
-                with self._open(mt_config.build_url(self.endpoint, text, self.sl, self.tl)) as r:
-                    return mt_config.parse_response(r.read().decode("utf-8", "replace"))
+                return mt_config.translate_once(
+                    text, self.sl, self.tl, endpoint=self.endpoint,
+                    api_key=self.api_key, api_header=self.api_header,
+                    api_type=self.api_type, model=self.model)
             except Cancel:
                 raise
             except Exception:
@@ -247,8 +254,8 @@ class Pipe:
                 time.sleep(3 + 3 * a + random.random() * 2)
 
     def mt_batch(self, qs, tries=5):
-        """多条合并请求——仅内置谷歌端点支持；自定义接口自动退化为逐条"""
-        if self.endpoint != mt_config.DEFAULT_ENDPOINT:
+        """多条合并请求——仅内置谷歌端点支持；自定义/AI 接口自动退化为逐条"""
+        if self.api_type != "get" or self.endpoint != mt_config.DEFAULT_ENDPOINT:
             return [self.mt_one(q) for q in qs]
         u = (self.endpoint.replace("{sl}", self.sl).replace("{tl}", self.tl)
              .replace("&q={q}", "") + "".join("&q=" + urllib.parse.quote(q) for q in qs))
@@ -395,6 +402,9 @@ BG = "#f5f6f8"
 DROP_BG = "#eef2ff"
 DROP_BORDER = "#c7d2fe"
 
+# 接口类型（语言中立标签）
+API_TYPES = [("MT · GET", "get"), ("AI · OpenAI", "openai")]
+
 class App:
     def __init__(self, root):
         self.root = root
@@ -480,25 +490,36 @@ class App:
         cfg = ttk.LabelFrame(self.root, text=self.T("api_frame"), padding=8)
         cfg.pack(fill="x", padx=14, pady=(4, 2))
         self._cfg_frame = cfg
+        # 类型 + 模型行
+        self.type_var = tk.StringVar(value="MT · GET")
+        ttk.Label(cfg, text="Type:").grid(row=0, column=0, sticky="w")
+        self.type_cmb = ttk.Combobox(cfg, textvariable=self.type_var,
+                                     values=[n for n, _ in API_TYPES],
+                                     width=13, state="readonly")
+        self.type_cmb.grid(row=0, column=1, columnspan=2, sticky="w", padx=4, pady=2)
+        ttk.Label(cfg, text="Model:").grid(row=0, column=3, sticky="e")
+        self.model_var = tk.StringVar(value="")
+        self.model_entry = ttk.Entry(cfg, textvariable=self.model_var, width=18)
+        self.model_entry.grid(row=0, column=4, sticky="w", padx=4)
         self.lbl_url = ttk.Label(cfg, text=self.T("url"))
-        self.lbl_url.grid(row=0, column=0, sticky="w")
+        self.lbl_url.grid(row=1, column=0, sticky="w")
         self.url_var = tk.StringVar(value=mt_config.DEFAULT_ENDPOINT)
-        ttk.Entry(cfg, textvariable=self.url_var).grid(row=0, column=1, columnspan=3,
+        ttk.Entry(cfg, textvariable=self.url_var).grid(row=1, column=1, columnspan=3,
                                                        sticky="we", padx=4, pady=2)
         self.lbl_key = ttk.Label(cfg, text=self.T("key"))
-        self.lbl_key.grid(row=1, column=0, sticky="w")
+        self.lbl_key.grid(row=2, column=0, sticky="w")
         self.key_var = tk.StringVar(value="")
-        ttk.Entry(cfg, textvariable=self.key_var, show="*").grid(row=1, column=1,
+        ttk.Entry(cfg, textvariable=self.key_var, show="*").grid(row=2, column=1,
                                                                  sticky="we", padx=4, pady=2)
         self.lbl_header = ttk.Label(cfg, text=self.T("header"))
-        self.lbl_header.grid(row=1, column=2, sticky="e")
+        self.lbl_header.grid(row=2, column=3, sticky="e")
         self.hdr_var = tk.StringVar(value="Authorization")
-        ttk.Entry(cfg, textvariable=self.hdr_var, width=16).grid(row=1, column=3,
+        ttk.Entry(cfg, textvariable=self.hdr_var, width=18).grid(row=2, column=4,
                                                                  sticky="w", padx=4)
         self.save_btn = ttk.Button(cfg, text=self.T("save_env"), command=self.save_env)
-        self.save_btn.grid(row=0, column=4, rowspan=2, padx=(8, 0))
+        self.save_btn.grid(row=1, column=5, rowspan=2, padx=(8, 0), sticky="ns")
         self.lbl_api_hint = ttk.Label(cfg, text=self.T("api_hint"), style="Hint.TLabel")
-        self.lbl_api_hint.grid(row=2, column=0, columnspan=5, sticky="w", pady=(4, 0))
+        self.lbl_api_hint.grid(row=3, column=0, columnspan=6, sticky="w", pady=(4, 0))
         cfg.columnconfigure(1, weight=1)
 
         env = mt_config.load_env()
@@ -510,6 +531,12 @@ class App:
             self.hdr_var.set(env["MT_API_HEADER"])
         if env.get("MT_AUTO_NAMES"):
             self.autonames_var.set(env["MT_AUTO_NAMES"] == "1")
+        if env.get("MT_API_TYPE"):
+            for n, v in API_TYPES:
+                if v == env["MT_API_TYPE"]:
+                    self.type_var.set(n)
+        if env.get("MT_MODEL"):
+            self.model_var.set(env["MT_MODEL"])
 
         # ---- 拖放区 ----
         drop_text = self.T("drop") + (self.T("drop_nodnd") if not HAS_DND else "")
@@ -570,21 +597,19 @@ class App:
         self._rebuild_texts()
 
     def _rebuild_texts(self):
-        # 更新 LabelFrame 标题需要保存引用——重建轻量文案控件即可
-        # 这里采用简单方案：销毁并重建配置区/拖放区文本
         for w in (self.lbl_url, self.lbl_key, self.lbl_header, self.save_btn, self.lbl_api_hint):
             w.destroy()
         cfg = self._cfg_frame
         self.lbl_url = ttk.Label(cfg, text=self.T("url"))
-        self.lbl_url.grid(row=0, column=0, sticky="w")
+        self.lbl_url.grid(row=1, column=0, sticky="w")
         self.lbl_key = ttk.Label(cfg, text=self.T("key"))
-        self.lbl_key.grid(row=1, column=0, sticky="w")
+        self.lbl_key.grid(row=2, column=0, sticky="w")
         self.lbl_header = ttk.Label(cfg, text=self.T("header"))
-        self.lbl_header.grid(row=1, column=2, sticky="e")
+        self.lbl_header.grid(row=2, column=3, sticky="e")
         self.save_btn = ttk.Button(cfg, text=self.T("save_env"), command=self.save_env)
-        self.save_btn.grid(row=0, column=4, rowspan=2, padx=(8, 0))
+        self.save_btn.grid(row=1, column=5, rowspan=2, padx=(8, 0), sticky="ns")
         self.lbl_api_hint = ttk.Label(cfg, text=self.T("api_hint"), style="Hint.TLabel")
-        self.lbl_api_hint.grid(row=2, column=0, columnspan=5, sticky="w", pady=(4, 0))
+        self.lbl_api_hint.grid(row=3, column=0, columnspan=6, sticky="w", pady=(4, 0))
         cfg.config(text=self.T("api_frame"))
         self.drop.config(text=self.T("drop") + (self.T("drop_nodnd") if not HAS_DND else ""))
         self.start_btn.config(text=self.T("start"))
@@ -644,7 +669,9 @@ class App:
                     api_key=self.key_var.get().strip(),
                     api_header=self.hdr_var.get().strip(),
                     auto_names=self.autonames_var.get(),
-                    lang=self.lang)
+                    lang=self.lang,
+                    api_type=dict(API_TYPES)[self.type_var.get()],
+                    model=self.model_var.get().strip())
         self.cancel.clear()
         self.start_btn.config(state="disabled")
         self.cancel_btn.config(state="normal")
@@ -681,6 +708,8 @@ class App:
                 "MT_API_HEADER": self.hdr_var.get().strip(),
                 "MT_AUTO_NAMES": "1" if self.autonames_var.get() else "0",
                 "MT_LANG": self.lang,
+                "MT_API_TYPE": dict(API_TYPES)[self.type_var.get()],
+                "MT_MODEL": self.model_var.get().strip(),
             })
             self.log(self.T("log_cfg").format(mt_config.env_path()))
             messagebox.showinfo(self.T("msg_saved"), self.T("msg_saved_b").format(mt_config.env_path()))

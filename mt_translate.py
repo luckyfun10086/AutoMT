@@ -25,18 +25,20 @@ ENV = mt_config.load_env()
 SL = ENV.get("MT_SL", "en")
 TL = ENV.get("MT_TL", "zh-CN")
 ENDPOINT = ENV.get("MT_ENDPOINT", "").strip() or mt_config.DEFAULT_ENDPOINT
+API_TYPE = ENV.get("MT_API_TYPE", "get")
+MODEL = ENV.get("MT_MODEL", "")
 HEADERS = mt_config.build_headers(ENV.get("MT_API_KEY"), ENV.get("MT_API_HEADER"))
-BUILTIN = ENDPOINT == mt_config.DEFAULT_ENDPOINT
+BUILTIN = API_TYPE == "get" and ENDPOINT == mt_config.DEFAULT_ENDPOINT
 SEG = "--seg" in sys.argv
 segre = re.compile(r"(〔T[0-9a-f]{8}〕)")
 
 def mt(text, tries=5):
     for a in range(tries):
         try:
-            url = mt_config.build_url(ENDPOINT, text, SL, TL)
-            req = urllib.request.Request(url, headers=HEADERS)
-            with urllib.request.urlopen(req, timeout=30) as r:
-                return mt_config.parse_response(r.read().decode("utf-8", "replace"))
+            return mt_config.translate_once(
+                text, SL, TL, endpoint=ENDPOINT,
+                api_key=ENV.get("MT_API_KEY"), api_header=ENV.get("MT_API_HEADER"),
+                api_type=API_TYPE, model=MODEL)
         except Exception:
             if a == tries - 1:
                 raise

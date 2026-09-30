@@ -25,17 +25,45 @@ exe 同目录。
   游戏文本全部被 `.gitignore` 排除——你的游戏内容和专有名词不会上传
 - 上传仓库前建议检查：`git status` 不应看到 `.env` / `mt_work/` / 任何 json 文本
 
-## 自定义翻译接口
+## 翻译接口（机翻 / AI 翻译两类）
 
-GUI 中部「翻译接口」栏：
+在 GUI「翻译接口」栏选择 **Type（接口类型）**，填好信息后「保存到 .env」。
 
-- **URL**：用 `{sl}`（源语言）`{tl}`（目标语言）`{q}`（URL编码后的原文）三个占位符，
-  例如 `https://api.example.com/translate?source={sl}&target={tl}&text={q}`
-- **Key / 请求头**：默认以 `Authorization: Bearer <Key>` 发送；自定义头（如 `X-Api-Key`）
-  则以原值发送
-- 「保存到 .env」持久化；留默认则用内置免费端点（无需 Key，批量 8 条/请求）
-- 响应格式自动识别：谷歌 `/t` 列表、DeepL 风格 `{"translations":[{"text":..}]}`
-  （DeepL）、`{"translatedText":..}`（MyMemory）、纯文本
+### 类型一：机翻（`MT · GET` 模板）
+
+GET 模板端点，URL 用 `{sl}`（源语言）`{tl}`（目标语言）`{q}`（原文）占位符：
+
+```
+https://api.example.com/translate?source={sl}&target={tl}&text={q}
+```
+
+支持 / 实测过的接口：
+
+| 服务 | 用法 |
+|------|------|
+| **内置免费端点**（谷歌） | 保持默认 URL 即可——无需 Key，批量 8 条/请求，基础质量 |
+| **LibreTranslate**（自建/公共） | `https://libretranslate.com/translate?q={q}&source={sl}&target={tl}`，Key 填请求头 `X-api-key` |
+| **MyMemory** | `https://api.mymemory.translated.net/get?q={q}&langpair={sl}|{tl}` |
+| **DeepLX**（自建 DeepL 代理） | `http://localhost:1188/translate?text={q}&source_lang={sl}&target_lang={tl}` |
+| 其它任意 GET 接口 | 按占位符拼 URL 即可；响应格式自动识别（谷歌列表 / `translations[]` / `translatedText` / 纯文本） |
+
+### 类型二：AI 翻译（`AI · OpenAI` 兼容）
+
+OpenAI 兼容的 **chat/completions** 端点（POST + JSON）。填完整 URL、API Key 和
+模型名——质量远超机翻，按量计费：
+
+| 服务 | URL | 模型示例 |
+|------|-----|----------|
+| **DeepSeek** | `https://api.deepseek.com/chat/completions` | `deepseek-chat` |
+| **OpenAI** | `https://api.openai.com/v1/chat/completions` | `gpt-4o-mini` |
+| **Kimi（月之暗面）** | `https://api.moonshot.cn/v1/chat/completions` | `moonshot-v1-8k` |
+| **智谱 GLM** | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | `glm-4-flash` |
+| **OpenRouter**（Claude/Gemini/…） | `https://openrouter.ai/api/v1/chat/completions` | `anthropic/claude-3.5-haiku` |
+| **Gemini**（OpenAI 兼容入口） | `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` | `gemini-2.0-flash` |
+| **Ollama**（本地部署，免 Key） | `http://localhost:11434/v1/chat/completions` | `qwen2.5:7b` |
+
+工具自动发送固定译者系统提示（源/目标语言、"只输出译文"、保持 `〔T…〕` 记号不变）。
+AI 模式逐条请求——更慢，但记号掩码管线同样保证格式零损坏。
 
 等价的 `.env` 写法见 [`.env.example`](.env.example)。
 

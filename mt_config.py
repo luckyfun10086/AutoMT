@@ -20,7 +20,41 @@ DEFAULT_ENDPOINT = ("https://clients5.google.com/translate_a/t"
                     "?client=dict-chrome-ex&sl={sl}&tl={tl}&q={q}")
 
 ENV_KEYS = ("MT_ENDPOINT", "MT_API_KEY", "MT_API_HEADER", "MT_SL", "MT_TL",
-            "MT_AUTO_NAMES", "MT_LANG")
+            "MT_AUTO_NAMES", "MT_LANG", "MT_API_TYPE", "MT_MODEL")
+
+def translate_once(text, sl, tl, endpoint=None, api_key=None, api_header=None,
+                   api_type="get", model=None, timeout=30, opener=None):
+    """统一翻译调用。
+    api_type='get'    —— 机翻：GET 模板端点（{sl}/{tl}/{q} 占位符）
+    api_type='openai' —— AI 翻译：OpenAI 兼容 chat/completions（POST + JSON）
+    """
+    import urllib.request
+    opener = opener or urllib.request.urlopen
+    if api_type == "openai":
+        url = (endpoint or "").strip()
+        if not url:
+            raise ValueError("AI 翻译需要填写完整接口地址，例如 https://api.deepseek.com/chat/completions")
+        sys_prompt = ("You are a professional game translator. Translate the user's text "
+                      f"from {sl} to {tl}. Output ONLY the translation, nothing else. "
+                      "Keep placeholder tokens like 〔T1a2b3c4〕 EXACTLY unchanged and in "
+                      "the corresponding places. Preserve line breaks where they appear as tokens.")
+        body = json.dumps({
+            "model": model or "gpt-4o-mini",
+            "messages": [{"role": "system", "content": sys_prompt},
+                         {"role": "user", "content": text}],
+            "temperature": 0.3,
+        }).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            h = (api_header or "Authorization").strip() or "Authorization"
+            headers[h] = f"Bearer {api_key}" if h.lower() == "authorization" else api_key
+        req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        with opener(req, timeout=max(timeout, 120)) as r:
+            return parse_response(r.read().decode("utf-8", "replace"))
+    url = build_url(endpoint or DEFAULT_ENDPOINT, text, sl, tl)
+    req = urllib.request.Request(url, headers=build_headers(api_key, api_header))
+    with opener(req, timeout=timeout) as r:
+        return parse_response(r.read().decode("utf-8", "replace"))
 
 def base_dir():
     """exe 旁边（PyInstaller 打包后 __file__ 在临时目录，须用 exe 自身位置）"""
@@ -209,6 +243,14 @@ def parse_response(raw):
             return "".join(x[0] if isinstance(x, list) else str(x) for x in d[0])
         return "".join(str(x) for x in d)
     if isinstance(d, dict):
+        # OpenAI 兼容 chat/completions
+        ch = d.get("choices")
+        if isinstance(ch, list) and ch:
+            m = ch[0].get("message") if isinstance(ch[0], dict) else None
+            if isinstance(m, dict) and isinstance(m.get("content"), str):
+                return m["content"].strip()
+            if isinstance(ch[0], dict) and isinstance(ch[0].get("text"), str):
+                return ch[0]["text"].strip()  # legacy completions
         for path in (("translations",), ("data", "translations"), ("result",)):
             node = d
             ok = True

@@ -53,18 +53,46 @@ so MTool picks them up directly.
   game texts are all gitignored — your game content and terminology never leave the machine
 - Before publishing your fork: `git status` should never list `.env`, `mt_work/`, or any json
 
-## Custom Translation API
+## Translation APIs (two kinds)
 
-Fill in the **Translation API** panel in the GUI:
+Pick an **API type** in the GUI panel, fill in the fields, **Save to .env**.
 
-- **URL**: use the `{sl}` (source lang), `{tl}` (target lang) and `{q}` (URL-encoded text)
-  placeholders, e.g. `https://api.example.com/translate?source={sl}&target={tl}&text={q}`
-- **Key / header**: sent as `Authorization: Bearer <key>` by default; name another header
-  (e.g. `X-Api-Key`) to send the raw value
-- **Save to .env** persists the setup; leave the default URL to use the free built-in
-  endpoint (no key, batched 8 strings/request). Custom endpoints are requested one-by-one.
-- Response formats auto-detected: Google `/t` list, DeepL-style
-  `{"translations":[{"text":..}]}`, MyMemory `{"translatedText":..}`, plain text
+### Type 1 — MT (traditional machine translation, `MT · GET`)
+
+GET-template endpoints using `{sl}` / `{tl}` / `{q}` placeholders:
+
+```
+https://api.example.com/translate?source={sl}&target={tl}&text={q}
+```
+
+Supported / tested:
+
+| Service | How |
+|---------|-----|
+| **Built-in free endpoint** (Google) | leave the default URL — no key, batched 8 strings/request, basic quality |
+| **LibreTranslate** (self-host / public) | `https://libretranslate.com/translate?q={q}&source={sl}&target={tl}` + API key header `X-api-key` |
+| **MyMemory** | `https://api.mymemory.translated.net/get?q={q}&langpair={sl}|{tl}` |
+| **DeepLX** (self-hosted DeepL proxy) | `http://localhost:1188/translate?text={q}&source_lang={sl}&target_lang={tl}` |
+| Any other GET API | craft the URL with the three placeholders; response auto-detected (Google list / `translations[]` / `translatedText` / plain text) |
+
+### Type 2 — AI translation (`AI · OpenAI`)
+
+OpenAI-compatible **chat/completions** endpoints (POST + JSON). Fill the full URL, your
+API key and a model name — quality is dramatically better than MT, at API cost:
+
+| Service | URL | Model example |
+|---------|-----|---------------|
+| **DeepSeek** | `https://api.deepseek.com/chat/completions` | `deepseek-chat` |
+| **OpenAI** | `https://api.openai.com/v1/chat/completions` | `gpt-4o-mini` |
+| **Kimi (Moonshot)** | `https://api.moonshot.cn/v1/chat/completions` | `moonshot-v1-8k` |
+| **智谱 GLM** | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | `glm-4-flash` |
+| **OpenRouter** (Claude/Gemini/…) | `https://openrouter.ai/api/v1/chat/completions` | `anthropic/claude-3.5-haiku` |
+| **Gemini** (OpenAI-compat) | `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` | `gemini-2.0-flash` |
+| **Ollama** (local, no key) | `http://localhost:11434/v1/chat/completions` | `qwen2.5:7b` |
+
+The tool sends a fixed translator system prompt (source/target language, "output only the
+translation", keep `〔T…〕` tokens unchanged). AI mode translates one string per request —
+slower but the masking pipeline guarantees format safety either way.
 
 Equivalent `.env` keys are documented in [`.env.example`](.env.example).
 
