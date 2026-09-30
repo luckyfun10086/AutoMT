@@ -15,12 +15,18 @@ committed).
 > whose JSON format this project originally automated (closed-source, mtool.app);
 > standalone engine support came later and outgrew the name.
 
-Validated on a 70,000+ string game text corpus.
+Validated in the field: a 70,000+ string MTool corpus; Kirikiri on three real games
+(17 archives / 22,806 files / up to 44,296 segments per game); Ren'Py against the
+SDK's engine-generated French translation (788/788 statement identifiers matched);
+the Ruby Marshal codec passes byte-exact ground truth, 300 fuzz round-trips and
+bidirectional cross-validation with the `rubymarshal` library. Eight self-test
+suites cover every engine end-to-end.
 
 ## Download
 
 Grab `OmniTrans.exe` from the [**Releases**](https://github.com/luckyfun10086/OmniTrans/releases)
-page — a standalone Windows binary, no Python required. Everything (`.env`, `names.txt`,
+page — a standalone Windows binary (~11 MB), no Python required. v2.0.0 ships the
+8-engine support, the 3-tab GUI and dark mode. Everything (`.env`, `names.txt`,
 `mt_work/`) is created next to the exe.
 
 > **Quality & fair use**: the built-in free endpoint delivers basic machine-translation
@@ -43,11 +49,15 @@ The window is organized into tabs:
    supported engine (and detected-but-unsupported ones with guidance)
 3. **⚙ Settings** — translation API configuration (saved to local `.env`)
 
-After translation finishes, OmniTrans prompts to apply the result to the game
-and switches back to the Game tab. Cancel anytime — progress is resumable.
+A **dark / light theme** toggle (☀/🌙, top-right) is persisted to `.env`
+(`MT_THEME`); dark is the default. After translation finishes, OmniTrans prompts
+to apply the result to the game and switches back to the Game tab. Cancel
+anytime — progress is resumable.
 
-> Drag & drop inside the packaged exe works out of the box. Running from source needs
-> `pip install tkinterdnd2` (falls back to a file picker without it).
+> Drag & drop inside the packaged exe works out of the box. Running from source:
+> `pip install tkinterdnd2` (drag & drop; falls back to a file picker without it)
+> and optionally `pip install sv-ttk` (modern Win11-style theming; without it a
+> classic theme is used).
 >
 > Rebuild the exe: `pip install pyinstaller && python -m PyInstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2 --collect-all sv_ttk mt_gui.py`
 
@@ -144,7 +154,7 @@ or use `--no-auto-names` / `MT_AUTO_NAMES=0`. Names are then machine-translated 
 other text (more natural renderings, consistency not guaranteed). Manual names.txt entries
 work in every mode.
 
-## Standalone RPG Maker Extraction (no MTool needed)
+## Standalone Engine Localization (no MTool needed)
 
 **Supported engines:**
 
@@ -157,7 +167,7 @@ work in every mode.
 | **Kirikiri / KAG** (.xp3) | `data.xp3` + `patch*.xp3` | ✅ fully supported — all archives parsed in mount order; write-back is a **non-destructive overlay patch** |
 | **Ren'Py** (6.99+/7/8) | `game/*.rpa`, `game/*.rpyc` | ✅ fully supported — generates official `game/tl/<lang>/` packages (non-destructive) |
 | **TyranoScript** | `data/scenario/*.ks` | ✅ fully supported |
-| **Unity** (TextAsset scenarios / MonoBehaviour strings / Addressables & Localization bundles) | `*_Data` + `StreamingAssets/**/*.bundle` | ✅ supported (needs `pip install UnityPy`; strings compiled into DLLs are out of scope) |
+| **Unity** (TextAsset scenarios / MonoBehaviour strings / Addressables & Localization bundles) | `*_Data` + `StreamingAssets/**/*.bundle` | ✅ supported (needs UnityPy — the GUI offers to install it on first use; strings compiled into DLLs are out of scope) |
 
 Detected but not (yet) supported: SiglusEngine (Key), AliceSoft (.ain), ExHIBIT,
 Wolf RPG, NScripter — dropping such a folder tells you which engine it is and
@@ -280,7 +290,7 @@ to confirm).
 ### Unity games
 
 ```
-pip install UnityPy
+pip install UnityPy                       # only for CLI use; the GUI installs it on demand
 python unity_extract.py <game-folder>     # scan assets/levels/bundles → strings + manifest
 python mt_clean.py <game>_extracted.json && python mt_translate.py && python mt_apply.py <game>_extracted.json
 python unity_apply.py <game-folder> <game>_extracted_translated.json
@@ -312,7 +322,8 @@ python mt_apply.py [file]     ③ restore: unmask → validate → clean → wri
 ```
 
 `mt_translate.py --seg` retranslates stubborn strings segment-wise (tokens can never be
-lost). Defaults to `ManualTransFile.json` in the current directory.
+lost). The optional `[file]` argument works for any engine's `*_extracted.json`; it
+defaults to `ManualTransFile.json` in the current directory.
 
 ## Key Mechanisms (battle-tested)
 
@@ -330,6 +341,12 @@ lost). Defaults to `ManualTransFile.json` in the current directory.
 
 ## Typical Workflow
 
+**Recommended (GUI, any engine)** — drop the game folder into the window and follow
+the guided Game Localization tab: ① engine detected → ② Extract text → ③ Translate
+→ ④ Apply to game. Backups are automatic at every step.
+
+**MTool JSON (CLI)**:
+
 ```
 1. MTool → export ManualTransFile.json → copy into this folder
 2. (optional) put the game's names/places into names.txt
@@ -341,6 +358,10 @@ lost). Defaults to `ManualTransFile.json` in the current directory.
    python mt_apply.py
 7. Import ManualTransFile_translated.json back into MTool
 ```
+
+**Any engine (CLI)**: run the engine's `<engine>_extract.py`, then the same three
+pipeline steps on `<game>_extracted.json`, then `<engine>_apply.py` — see the
+per-engine sections above.
 
 ## Files
 

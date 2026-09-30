@@ -11,13 +11,16 @@ Kirikiri、Ren'Py、TyranoScript、Unity——自动识别引擎，提取文本 
 > [MTool](https://mtool.app/) —— 本项目最初为之打造的翻译工具（其 JSON 格式是
 > 起点之一，非开源，官网 mtool.app）；后来的全引擎独立支持让工具长过了旧名字。
 
-已在 7 万+条游戏文本上实弹验证。
+实弹验证：7 万+条 MTool 语料；Kirikiri 在 3 个真实游戏上验证（17 封包 / 22,806 文件 /
+单游戏最多 44,296 段）；Ren'Py 与 SDK 官方法语翻译交叉验证（788/788 语句标识符全中）；
+Ruby Marshal 编解码器通过字节级规范字节串、300 轮 fuzz 与 `rubymarshal` 双向交叉验证。
+8 套自测覆盖每个引擎的全链路。
 
 ## 下载
 
 到 [**Releases**](https://github.com/luckyfun10086/OmniTrans/releases) 页面下载 `OmniTrans.exe`
-——Windows 独立可执行文件，无需安装 Python。`.env`、`names.txt`、`mt_work/` 全部生成在
-exe 同目录。
+——Windows 独立可执行文件（约 11MB），无需安装 Python。v2.0.0 起提供 8 引擎支持、
+三标签页界面与暗色模式。`.env`、`names.txt`、`mt_work/` 全部生成在 exe 同目录。
 
 ## 隐私与安全设计
 
@@ -87,10 +90,12 @@ AI 但好过留英文，结束汇总里报告兜底条数。`.env` 里 `MT_FALLB
    引导式流程 ② 提取文本 → ③ 开始翻译 → ④ 导入游戏；底部表格实时列出全部引擎支持状态
 3. **⚙ 设置** —— 翻译接口配置（保存在本机 `.env`）
 
+右上角 **暗色/亮色主题切换**（☀/🌙）持久化到 `.env`（`MT_THEME`），默认暗色。
 翻译完成后自动询问是否导入游戏并跳回游戏页。随时可取消，断点续翻。
 
 校验失败的条目自动进入分段扫尾重翻（记号绝不可能丢）。exe 版拖拽开箱即用；
-源码运行需 `pip install tkinterdnd2`（未装时自动退化为点选文件）。
+源码运行需 `pip install tkinterdnd2`（未装时自动退化为点选文件），可选
+`pip install sv-ttk`（Win11 风格现代主题，未装时用经典主题）。
 
 > 重新打包：`pip install pyinstaller && python -m PyInstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2 --collect-all sv_ttk mt_gui.py`
 
@@ -126,7 +131,7 @@ Bob               不写 = 号则保持英文原样
 持久化）；命令行用 `--no-auto-names` 或 `.env` 里 `MT_AUTO_NAMES=0`。关闭后人名按
 普通文本交由机翻（更自然的译名，但一致性不保证），names.txt 人工词条在任何模式下都生效。
 
-## 独立 RPG Maker 提取（无需 MTool）
+## 独立游戏汉化（无需 MTool）
 
 **支持的引擎：**
 
@@ -139,7 +144,7 @@ Bob               不写 = 号则保持英文原样
 | **Kirikiri / KAG**（.xp3） | `data.xp3` + `patch*.xp3` | ✅ 完整支持——按挂载顺序解析全部封包；回写为**非破坏覆盖补丁** |
 | **Ren'Py**（6.99+/7/8） | `game/*.rpa`、`game/*.rpyc` | ✅ 完整支持——生成官方 `game/tl/<语言>/` 翻译包（非破坏） |
 | **TyranoScript** | `data/scenario/*.ks` | ✅ 完整支持 |
-| **Unity**（TextAsset 剧本 / MonoBehaviour 内嵌文本 / Addressables・Localization 字符串表 Bundle） | `*_Data` + `StreamingAssets/**/*.bundle` | ✅ 支持（依赖 UnityPy，`pip install UnityPy`；不支持编译进 DLL 的字符串） |
+| **Unity**（TextAsset 剧本 / MonoBehaviour 内嵌文本 / Addressables・Localization 字符串表 Bundle） | `*_Data` + `StreamingAssets/**/*.bundle` | ✅ 支持（依赖 UnityPy，GUI 首次使用自动弹窗安装；不支持编译进 DLL 的字符串） |
 
 可识别但暂不支持：SiglusEngine（Key 社）、AliceSoft（.ain）、ExHIBIT、
 Wolf RPG、NScripter——拖入即提示引擎名称与替代方案。
@@ -243,7 +248,7 @@ python srpg_apply.py <游戏目录> <游戏名>_extracted_translated.json
 ### Unity 游戏
 
 ```
-pip install UnityPy
+pip install UnityPy                        # 仅 CLI 需要；GUI 首次使用会自动弹窗安装
 python unity_extract.py <游戏目录>      # 扫描 assets/level/bundle → 收集文本+位置清单
 python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && python mt_apply.py <游戏名>_extracted.json
 python unity_apply.py <游戏目录> <游戏名>_extracted_translated.json
@@ -270,7 +275,8 @@ python mt_translate.py      ② 机翻执行器（断点可续；--seg 为分段
 python mt_apply.py [文件]   ③ 还原回填：校验+清理 → 输出 translated.json
 ```
 
-默认读当前目录 `ManualTransFile.json`。
+`[文件]` 参数适用于任意引擎的 `*_extracted.json`；不传时默认读当前目录
+`ManualTransFile.json`。
 
 ## 关键机制（实战踩坑沉淀）
 
@@ -288,6 +294,11 @@ python mt_apply.py [文件]   ③ 还原回填：校验+清理 → 输出 transl
 
 ## 典型工作流
 
+**推荐（GUI，任意引擎）**——把游戏目录拖进窗口，按「游戏汉化」页的引导走：
+① 自动识别引擎 → ② 提取文本 → ③ 开始翻译 → ④ 导入游戏，每一步都有自动备份。
+
+**MTool JSON（命令行）**：
+
 ```
 1. MTool 打开游戏 → 导出 ManualTransFile.json → 拷到本目录
 2. （可选）把该游戏的人名地名写进 names.txt
@@ -299,6 +310,9 @@ python mt_apply.py [文件]   ③ 还原回填：校验+清理 → 输出 transl
    python mt_apply.py
 7. ManualTransFile_translated.json 导回 MTool / 放回游戏目录
 ```
+
+**任意引擎（命令行）**：先跑该引擎的 `<引擎>_extract.py`，对 `<游戏名>_extracted.json`
+走同样三步，再跑 `<引擎>_apply.py` —— 各引擎细节见上方分节。
 
 ## 文件说明
 
