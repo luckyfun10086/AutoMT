@@ -157,5 +157,7 @@ def extract():
           f"python mt_apply.py \"{dst}\"")
     print(f"最后:   python unity_apply.py <游戏目录> \"{name}_extracted_translated.json\"")
 
+main = extract          # GUI 的 _run_extractor 调 mod.main()
+
 if __name__ == "__main__":
     extract()
