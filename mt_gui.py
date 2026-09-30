@@ -61,6 +61,28 @@ S = {
         "log_cancelled": "已取消。进度已保存，重新开始可断点续翻。",
         "log_cfg": "配置已保存到 {}（.env 已被 .gitignore 排除，不会上传）",
         "log_start": "开始：{} → {}",
+        # ---- 游戏汉化页 ----
+        "tab_quick": "⚡ 快速翻译",
+        "tab_game": "🎮 游戏汉化",
+        "tab_cfg": "⚙ 设置",
+        "g_title": "游戏一键汉化（拖入游戏目录或 EXE 自动识别引擎）",
+        "g_drop": "拖入游戏目录 / EXE 到窗口任意位置",
+        "g_engine": "引擎：{}",
+        "g_unknown": "未识别",
+        "g_steps": "流程：① 识别引擎 → ② 提取文本 → ③ 机器翻译 → ④ 导入游戏",
+        "g_extract": "② 提取文本",
+        "g_translate": "③ 开始翻译",
+        "g_apply": "④ 导入游戏",
+        "g_need_extract": "请先提取文本",
+        "g_need_translate": "请先完成翻译",
+        "g_extracting": "提取中…",
+        "g_extracted": "已提取：{}",
+        "g_backup_note": "回写自动备份：Kirikiri/Ren'Py 非破坏（patch/tl 包）；其余引擎备份 .automt.bak / *_backup",
+        "g_supported": "已支持",
+        "g_unsupported": "可识别·暂不支持",
+        "g_engine_table": "引擎支持总览",
+        "g_col_engine": "引擎 Engine",
+        "g_col_status": "支持状态",
     },
     "en": {
         "title": "AutoMT — MTool JSON Auto-Translator",
@@ -99,6 +121,28 @@ S = {
         "log_cancelled": "Cancelled. Progress saved; restart to resume.",
         "log_cfg": "Config saved to {} (.env is gitignored, never uploaded)",
         "log_start": "Start: {} → {}",
+        # ---- Game localization tab ----
+        "tab_quick": "⚡ Quick Translate",
+        "tab_game": "🎮 Game Localization",
+        "tab_cfg": "⚙ Settings",
+        "g_title": "One-click game localization (drop a game folder / EXE to auto-detect the engine)",
+        "g_drop": "Drop a game folder / EXE anywhere in the window",
+        "g_engine": "Engine: {}",
+        "g_unknown": "Not detected",
+        "g_steps": "Flow: ① Detect → ② Extract → ③ Translate → ④ Apply to game",
+        "g_extract": "② Extract text",
+        "g_translate": "③ Translate",
+        "g_apply": "④ Apply to game",
+        "g_need_extract": "Extract text first",
+        "g_need_translate": "Finish translation first",
+        "g_extracting": "Extracting…",
+        "g_extracted": "Extracted: {}",
+        "g_backup_note": "Backups: Kirikiri/Ren'Py non-destructive (patch/tl packages); other engines keep .automt.bak / *_backup",
+        "g_supported": "Supported",
+        "g_unsupported": "Detected · not supported",
+        "g_engine_table": "Engine support overview",
+        "g_col_engine": "Engine",
+        "g_col_status": "Status",
     },
 }
 
@@ -505,8 +549,8 @@ class App:
         self.game_extract_script = None
         self.apply_script = None
 
-        self.root.geometry("720x600")
-        self.root.minsize(640, 540)
+        self.root.geometry("900x720")
+        self.root.minsize(820, 660)
         self.root.configure(bg=BG)
 
         # ---- 顶栏：标题 + 语言切换 ----
@@ -521,7 +565,7 @@ class App:
                                   cursor="hand2", font=("Segoe UI", 9, "bold"))
         self.lang_btn.pack(side="right")
 
-        # ---- 语言与选项行 ----
+        # ---- 全局：源/目标语言 + 人名选项 ----
         row1 = ttk.Frame(self.root, padding=(14, 8))
         row1.pack(fill="x")
         self.lbl_src = ttk.Label(row1, text=self.T("src"))
@@ -532,7 +576,7 @@ class App:
                      width=11, state="readonly").pack(side="left", padx=(4, 10))
         self.lbl_tgt = ttk.Label(row1, text=self.T("tgt"))
         self.lbl_tgt.pack(side="left")
-        self.tl_var = tk.StringVar(value="中文(简)" if self.lang == "zh" else "中文(简)")
+        self.tl_var = tk.StringVar(value="中文(简)")
         ttk.Combobox(row1, textvariable=self.tl_var, values=names_list,
                      width=11, state="readonly").pack(side="left", padx=4)
         self.autonames_var = tk.BooleanVar(value=True)
@@ -542,9 +586,107 @@ class App:
         self.lbl_names_hint = ttk.Label(row1, text=self.T("names_hint"), style="Hint.TLabel")
         self.lbl_names_hint.pack(side="left")
 
-        # ---- 接口配置 ----
-        cfg = ttk.LabelFrame(self.root, text=self.T("api_frame"), padding=8)
-        cfg.pack(fill="x", padx=14, pady=(4, 2))
+        # ---- 功能分区：三标签页 ----
+        self.nb = ttk.Notebook(self.root)
+        self.nb.pack(fill="both", expand=True, padx=10, pady=(2, 10))
+
+        # ===== Tab1 快速翻译 =====
+        t1 = ttk.Frame(self.nb, padding=4)
+        self.nb.add(t1, text=self.T("tab_quick"))
+        drop_text = self.T("drop") + (self.T("drop_nodnd") if not HAS_DND else "")
+        self.drop = tk.Label(t1, text=drop_text, relief="flat",
+                             bg=DROP_BG, fg="#4b5563", padx=16, pady=26,
+                             font=("Microsoft YaHei UI", 12), cursor="hand2",
+                             highlightthickness=2, highlightbackground=DROP_BORDER)
+        self.drop.pack(fill="x", pady=4)
+        self.drop.bind("<Button-1>", lambda e: self.pick())
+        self.drop.bind("<Enter>", lambda e: self.drop.config(highlightbackground=ACCENT))
+        self.drop.bind("<Leave>", lambda e: self.drop.config(highlightbackground=DROP_BORDER))
+
+        prog = ttk.Frame(t1, padding=(4, 2))
+        prog.pack(fill="x")
+        self.stage_var = tk.StringVar(value=self.T("waiting"))
+        self.lbl_stage = ttk.Label(prog, textvariable=self.stage_var,
+                                   font=("Microsoft YaHei UI", 10, "bold"),
+                                   foreground=ACCENT)
+        self.lbl_stage.pack(anchor="w")
+        self.bar = ttk.Progressbar(prog, maximum=100, style="TProgressbar")
+        self.bar.pack(fill="x", pady=5)
+        self.detail_var = tk.StringVar(value="")
+        ttk.Label(prog, textvariable=self.detail_var, style="Hint.TLabel").pack(anchor="w")
+
+        btns = ttk.Frame(t1, padding=(4, 4))
+        btns.pack(fill="x")
+        self.start_btn = ttk.Button(btns, text=self.T("start"), style="Accent.TButton",
+                                    command=self.start, state="disabled")
+        self.start_btn.pack(side="left")
+        self.cancel_btn = ttk.Button(btns, text=self.T("cancel"), command=self.cancel_now,
+                                     state="disabled")
+        self.cancel_btn.pack(side="left", padx=8)
+        self.open_btn = ttk.Button(btns, text=self.T("open_out"), command=self.open_out,
+                                   state="disabled")
+        self.open_btn.pack(side="left")
+
+        self.logbox = ScrolledText(t1, height=8, font=("Consolas", 9),
+                                   state="disabled", bg="#ffffff", relief="flat",
+                                   highlightthickness=1, highlightbackground="#e5e7eb")
+        self.logbox.pack(fill="both", expand=True, pady=(6, 2))
+
+        # ===== Tab2 游戏汉化 =====
+        t2 = ttk.Frame(self.nb, padding=10)
+        self.nb.add(t2, text=self.T("tab_game"))
+        ttk.Label(t2, text=self.T("g_title"),
+                  font=("Microsoft YaHei UI", 11, "bold"),
+                  foreground="#111827").pack(anchor="w")
+        ttk.Label(t2, text=self.T("g_drop") + "\n" + self.T("g_steps"),
+                  style="Hint.TLabel").pack(anchor="w", pady=(2, 8))
+
+        info = ttk.Frame(t2)
+        info.pack(fill="x", pady=4)
+        self.g_engine_var = tk.StringVar(value=self.T("g_engine").format(self.T("g_unknown")))
+        self.lbl_g_engine = ttk.Label(info, textvariable=self.g_engine_var,
+                                      font=("Microsoft YaHei UI", 11, "bold"),
+                                      foreground=ACCENT)
+        self.lbl_g_engine.pack(side="left")
+        self.g_path_var = tk.StringVar(value="")
+        ttk.Label(info, textvariable=self.g_path_var, style="Hint.TLabel").pack(
+            side="left", padx=10)
+
+        gbtns = ttk.Frame(t2, padding=(0, 6))
+        gbtns.pack(fill="x")
+        self.g_extract_btn = ttk.Button(gbtns, text=self.T("g_extract"),
+                                        style="Accent.TButton",
+                                        command=self.game_extract, state="disabled")
+        self.g_extract_btn.pack(side="left")
+        self.g_translate_btn = ttk.Button(gbtns, text=self.T("g_translate"),
+                                          command=self.start, state="disabled")
+        self.g_translate_btn.pack(side="left", padx=8)
+        self.apply_btn = ttk.Button(gbtns, text=self.T("g_apply"),
+                                    command=self.apply_to_game, state="disabled")
+        self.apply_btn.pack(side="left", padx=8)
+        ttk.Label(t2, text=self.T("g_backup_note"), style="Hint.TLabel").pack(anchor="w", pady=(2, 6))
+
+        # 引擎支持总览表
+        ttk.Label(t2, text=self.T("g_engine_table"),
+                  font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w", pady=(6, 2))
+        cols = ("engine", "status")
+        self.engine_tree = ttk.Treeview(t2, columns=cols, show="headings", height=9)
+        self.engine_tree.heading("engine", text=self.T("g_col_engine"))
+        self.engine_tree.column("engine", width=300, anchor="w")
+        self.engine_tree.heading("status", text=self.T("g_col_status"))
+        self.engine_tree.column("status", width=200, anchor="w")
+        for key, e in mt_config.ENGINES.items():
+            self.engine_tree.insert("", "end", iid=key,
+                                    values=(e["name"],
+                                            self.T("g_supported") if e["supported"]
+                                            else self.T("g_unsupported")))
+        self.engine_tree.pack(fill="both", expand=True, pady=(0, 4))
+
+        # ===== Tab3 设置 =====
+        t3 = ttk.Frame(self.nb, padding=8)
+        self.nb.add(t3, text=self.T("tab_cfg"))
+        cfg = ttk.LabelFrame(t3, text=self.T("api_frame"), padding=8)
+        cfg.pack(fill="x")
         self._cfg_frame = cfg
         # 类型 + 模型行
         self.type_var = tk.StringVar(value="MT · GET")
@@ -594,55 +736,10 @@ class App:
         if env.get("MT_MODEL"):
             self.model_var.set(env["MT_MODEL"])
 
-        # ---- 拖放区 ----
-        drop_text = self.T("drop") + (self.T("drop_nodnd") if not HAS_DND else "")
-        self.drop = tk.Label(self.root, text=drop_text, relief="flat",
-                             bg=DROP_BG, fg="#4b5563", padx=16, pady=26,
-                             font=("Microsoft YaHei UI", 12), cursor="hand2",
-                             highlightthickness=2, highlightbackground=DROP_BORDER)
-        self.drop.pack(fill="x", padx=14, pady=8)
-        self.drop.bind("<Button-1>", lambda e: self.pick())
-        self.drop.bind("<Enter>", lambda e: self.drop.config(highlightbackground=ACCENT))
-        self.drop.bind("<Leave>", lambda e: self.drop.config(highlightbackground=DROP_BORDER))
+        # ---- 全局拖放 ----
         if HAS_DND:
             self.root.drop_target_register(DND_FILES)
             self.root.dnd_bind("<<Drop>>", lambda e: self.on_drop(self._dnd_clean(e.data)))
-
-        # ---- 进度区 ----
-        prog = ttk.Frame(self.root, padding=(14, 2))
-        prog.pack(fill="x")
-        self.stage_var = tk.StringVar(value=self.T("waiting"))
-        self.lbl_stage = ttk.Label(prog, textvariable=self.stage_var,
-                                   font=("Microsoft YaHei UI", 10, "bold"),
-                                   foreground=ACCENT)
-        self.lbl_stage.pack(anchor="w")
-        self.bar = ttk.Progressbar(prog, maximum=100, style="TProgressbar")
-        self.bar.pack(fill="x", pady=5)
-        self.detail_var = tk.StringVar(value="")
-        ttk.Label(prog, textvariable=self.detail_var, style="Hint.TLabel").pack(anchor="w")
-
-        # ---- 按钮区 ----
-        btns = ttk.Frame(self.root, padding=(14, 4))
-        btns.pack(fill="x")
-        self.start_btn = ttk.Button(btns, text=self.T("start"), style="Accent.TButton",
-                                    command=self.start, state="disabled")
-        self.start_btn.pack(side="left")
-        self.cancel_btn = ttk.Button(btns, text=self.T("cancel"), command=self.cancel_now,
-                                     state="disabled")
-        self.cancel_btn.pack(side="left", padx=8)
-        self.open_btn = ttk.Button(btns, text=self.T("open_out"), command=self.open_out,
-                                   state="disabled")
-        self.open_btn.pack(side="left")
-        # 导入游戏按钮（引擎识别后激活）
-        self.apply_btn = ttk.Button(btns, text="📥 导入游戏 / Apply to Game",
-                                    command=self.apply_to_game, state="disabled")
-        self.apply_btn.pack(side="left", padx=8)
-
-        # ---- 日志 ----
-        self.logbox = ScrolledText(self.root, height=8, font=("Consolas", 9),
-                                   state="disabled", bg="#ffffff", relief="flat",
-                                   highlightthickness=1, highlightbackground="#e5e7eb")
-        self.logbox.pack(fill="both", expand=True, padx=14, pady=(6, 12))
 
     # ---- 语言切换 ----
     def toggle_lang(self):
@@ -675,6 +772,23 @@ class App:
         self.start_btn.config(text=self.T("start"))
         self.cancel_btn.config(text=self.T("cancel"))
         self.open_btn.config(text=self.T("open_out"))
+        # 标签页与游戏汉化页文案
+        self.nb.tab(0, text=self.T("tab_quick"))
+        self.nb.tab(1, text=self.T("tab_game"))
+        self.nb.tab(2, text=self.T("tab_cfg"))
+        self.g_extract_btn.config(text=self.T("g_extract"))
+        self.g_translate_btn.config(text=self.T("g_translate"))
+        self.apply_btn.config(text=self.T("g_apply"))
+        eng_name = (mt_config.ENGINES.get(self.game_engine, {}).get("name")
+                    if self.game_engine else None)
+        self.g_engine_var.set(self.T("g_engine").format(
+            eng_name or self.T("g_unknown")))
+        for key, e in mt_config.ENGINES.items():
+            self.engine_tree.item(key, values=(
+                e["name"], self.T("g_supported") if e["supported"]
+                else self.T("g_unsupported")))
+        self.engine_tree.heading("engine", text=self.T("g_col_engine"))
+        self.engine_tree.heading("status", text=self.T("g_col_status"))
         if not self.worker or not self.worker.is_alive():
             if self.stage_var.get() in (S["zh"]["waiting"], S["en"]["waiting"]):
                 self.stage_var.set(self.T("waiting"))
@@ -696,11 +810,16 @@ class App:
             if ok:
                 extract = mt_config.engine_extractor(eng)
                 if extract:
-                    # 记录游戏信息（后续回写用）
+                    # 记录游戏信息（后续回写用）并切到游戏汉化页
                     self.game_path = path if os.path.isdir(path) else os.path.dirname(path)
                     self.game_engine = eng
                     self.game_extract_script = extract
                     self.apply_script = mt_config.engine_applier(eng)
+                    self.g_engine_var.set(self.T("g_engine").format(name))
+                    self.g_path_var.set(self.game_path)
+                    self.g_extract_btn.config(state="normal")
+                    self.apply_btn.config(state="disabled")
+                    self.nb.select(1)
                     # Unity 引擎需检查 UnityPy
                     if eng == "unity":
                         if not self._check_and_install_unitypy():
@@ -709,11 +828,11 @@ class App:
                             f"✅ {name}",
                             f"检测到 {name}，是否自动提取文本？\n\n"
                             f"将运行 {extract}（可能需要几分钟）"):
-                        self._run_extractor(path, extract)
+                        self.game_extract()
                         return
                     # 用户选"否"→ 仍启用导入按钮
                     self.apply_btn.config(state="normal")
-                    self.log(f"[engine] {name} 已识别。可点击「导入游戏」按钮回写翻译。")
+                    self.log(f"[engine] {name} 已识别。可点击「提取文本」开始。")
                     return
             else:
                 messagebox.showwarning(
@@ -722,6 +841,19 @@ class App:
                 self.log(f"[engine] {name}: 不支持 — {reason}")
                 return
         self.set_file(path)
+        self.nb.select(0)
+
+    def game_extract(self):
+        """游戏汉化页：② 提取文本"""
+        if not self.game_path or not self.game_extract_script:
+            messagebox.showwarning("Info", self.T("g_drop"))
+            return
+        if self.worker and self.worker.is_alive():
+            messagebox.showwarning("Info", "busy / 正忙")
+            return
+        self.g_extract_btn.config(state="disabled")
+        self.stage_var.set(self.T("g_extracting"))
+        self._run_extractor(self.game_path, self.game_extract_script)
 
     def _check_and_install_unitypy(self):
         """检测 UnityPy；缺失时弹窗询问是否自动安装。返回 True=可用。"""
@@ -1029,12 +1161,14 @@ class App:
                     self.detail_var.set(f"ok={ok}, skipped={drop}")
                     self.log(f"[output] {dst}")
                     self.start_btn.config(state="normal")
+                    self.g_translate_btn.config(state="normal")
                     self.cancel_btn.config(state="disabled")
                     self.open_btn.config(state="normal")
                     self.drop.config(fg="#15803d")
                     # 翻译完成 → 如果之前识别过游戏引擎，询问是否立即导入
                     if self.game_path and self.apply_script:
                         self.apply_btn.config(state="normal")
+                        self.nb.select(1)
                         if messagebox.askyesno(
                                 "Apply to Game / 导入游戏",
                                 f"翻译完成！是否立即导入游戏？\n"
@@ -1044,19 +1178,21 @@ class App:
                                 f"原文件将自动备份。"):
                             self._run_applier(self.game_path, dst, self.apply_script)
                         else:
-                            self.log("[hint] 可稍后点击「导入游戏」按钮回写翻译 / "
-                                     "Click 'Apply to Game' button later")
+                            self.log("[hint] 可稍后点击「④ 导入游戏」按钮回写翻译 / "
+                                     "Click 'Apply to game' later")
                     else:
                         messagebox.showinfo(self.T("msg_done_t"),
                                             self.T("msg_done_b").format(ok, drop, dst))
                 elif kind == "applied":
                     self.log(f"[applied] ✓ 翻译已导入游戏: {payload}")
                     self.drop.config(fg="#0f7")
+                    self.g_extract_btn.config(state="normal")
                     messagebox.showinfo(
                         "Applied / 已导入",
                         f"翻译已成功导入游戏！\nTranslation applied successfully!\n\n"
                         f"游戏: {payload}\n"
-                        f"原文件备份为 .automt.bak（如需还原改回原名即可）")
+                        f"（Kirikiri/Ren'Py 为非破坏补丁，删除补丁文件即还原；"
+                        f"其余引擎原文件已备份 .automt.bak）")
                 elif kind == "cancelled":
                     self.stage_var.set(self.T("cancelled"))
                     self.start_btn.config(state="normal")
@@ -1064,8 +1200,12 @@ class App:
                     self.log(self.T("log_cancelled"))
                 elif kind == "extracted":
                     self.set_file(payload)
-                    self.apply_btn.config(state="normal")
+                    self.g_translate_btn.config(state="normal")
+                    self.g_extract_btn.config(state="normal")
+                    self.apply_btn.config(state="disabled")
+                    self.stage_var.set(self.T("g_extracted").format(os.path.basename(payload)))
                     self.log(f"[extract] 提取完成，已加载: {payload}")
+                    self.log("[hint] 点击「③ 开始翻译」继续；翻译完成会自动询问导入游戏")
                 elif kind == "error":
                     self.stage_var.set(self.T("error"))
                     self.start_btn.config(state="normal")
