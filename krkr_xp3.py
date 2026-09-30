@@ -5,10 +5,13 @@
   头: 11 字节 magic "XP3\\r\\n \\n\\x1a\\x8b\\x67\\x01" + u64 索引偏移
       索引处 u32 flag & 0x80 → 二级索引：u64 @ +9 为真实索引偏移
   索引头: u8 type(0=raw 1=zlib) + u64 zsize + u64 usize + 数据
+  索引头: u8 type(0=raw 1=zlib)；type=1 时 u64 zsize + u64 usize + zlib 数据，
+          type=0 时 u64 总长 + 原始 chunk 序列
   索引体: 若干 chunk: 4 字节 tag + u64 size + 载荷
       'File' 载荷内含子 chunk（同样 tag+u64 头）：
         'info': u32 protect + u64 original_size + u64 archived_size
-                + u32 名长(字节,UTF-16LE)（无 offset 字段，实测布局）
+                + u16 名长(字符数) + 名字(UTF-16LE 到块尾)
+                （HYPNOS/FQ_Switch/TIC 三种归档器实测一致）
         'segm': 每段 28 字节: u32 flag(0=raw 1=zlib 2=加密) + u64 offset
                 + u64 original_size + u64 archived_size
         'adlr': u32 adler32
@@ -19,7 +22,7 @@
   不改动原档案，生成 patch 封包（Kirikiri 按文件名序后挂载者覆盖先者）——
   卸载汉化只需删除 patch 文件，原游戏零风险。
 """
-import struct, zlib
+import os, struct, zlib
 
 MAGIC = b"XP3\r\n \n\x1a\x8b\x67\x01"
 
@@ -68,7 +71,12 @@ def parse_index(f):
         if usize and len(data) != usize:
             raise ValueError(f"索引解压尺寸不符 {len(data)} != {usize}")
     elif htype == 0:
-        data = f.read()
+        # raw 索引: u64 总长 + chunk 序列（TIC 实测）；个别归档器无长度 → 读到尾
+        total = struct.unpack("<Q", f.read(8))[0]
+        remaining = os.fstat(f.fileno()).st_size - f.tell()
+        if not total or total > remaining:
+            total = remaining
+        data = f.read(total)
     else:
         raise ValueError(f"未知索引类型 {htype}")
 
@@ -95,18 +103,16 @@ def _parse_file_chunk(body):
         sub = body[pos + 12:pos + 12 + size]
         pos += 12 + size
         if tag == b"info":
-            # 实测布局: protect + original + archived + 名字(UTF-16LE 直到块尾)
-            # 兼容变体: 少数归档器带 u32 名长前缀（长度恰好吻合时启用）
+            # 实测定论: protect u32 + u64 + u64 + u16名长(字符数) + 名字(到块尾)
+            # （HYPNOS/FQ_Switch/TIC 三种归档器一致：22 + 2*名长 == 块长）
             (e.protect, e.original_size, e.archived_size) = \
                 struct.unpack_from("<IQQ", sub, 0)
-            if len(sub) >= 24:
-                nl = struct.unpack_from("<I", sub, 20)[0]
-                if 24 + nl == len(sub):
-                    e.name = sub[24:].decode("utf-16-le", "replace")
+            if len(sub) >= 22:
+                nl = struct.unpack_from("<H", sub, 20)[0]
+                if 22 + 2 * nl == len(sub):
+                    e.name = sub[22:22 + 2 * nl].decode("utf-16-le", "replace")
                 else:
-                    e.name = sub[20:].decode("utf-16-le", "replace")
-            else:
-                e.name = sub[20:].decode("utf-16-le", "replace")
+                    e.name = sub[22:].decode("utf-16-le", "replace").rstrip("\x00")
         elif tag == b"segm":
             for i in range(0, size // 28):
                 e.segments.append(struct.unpack_from("<IQQQ", sub, i * 28))
@@ -154,8 +160,8 @@ def write_xp3(f, files, compress=True):
     import zlib as _z
     for nb, off, flag, arch, orig, mtime in placed:
         file_body = bytearray()
-        # info: protect + original + archived + 名字（无长度前缀，与实测布局一致）
-        info = struct.pack("<IQQ", 0, orig, arch) + nb
+        # info: protect + original + archived + u16名长(字符数) + 名字
+        info = struct.pack("<IQQH", 0, orig, arch, len(nb) // 2) + nb
         file_body += b"info" + struct.pack("<Q", len(info)) + info
         # segm: flag + offset + original + archived
         segm = struct.pack("<IQQQ", flag, off, orig, arch)
