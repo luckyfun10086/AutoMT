@@ -62,8 +62,11 @@ OpenAI 兼容的 **chat/completions** 端点（POST + JSON）。填完整 URL、
 | **Gemini**（OpenAI 兼容入口） | `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` | `gemini-2.0-flash` |
 | **Ollama**（本地部署，免 Key） | `http://localhost:11434/v1/chat/completions` | `qwen2.5:7b` |
 
-工具自动发送固定译者系统提示（源/目标语言、"只输出译文"、保持 `〔T…〕` 记号不变）。
-AI 模式逐条请求——更慢，但记号掩码管线同样保证格式零损坏。
+**错误提示与敏感词兜底**：接口问题按三类给出清晰双语提示——**致命**（401 Key
+无效 / 402 余额配额不足 / 404 模型名错误：立即弹窗终止，不再白白重试）；**跳过**
+（内容被服务方安全策略拦截/敏感词）；**重试**（429 限流 / 网络抖动：自动退避）。
+被拦截的条目会自动**改用内置免费机翻端点重译**（免费端点不审查内容）——质量不如
+AI 但好过留英文，结束汇总里报告兜底条数。`.env` 里 `MT_FALLBACK=0` 可关闭。
 
 等价的 `.env` 写法见 [`.env.example`](.env.example)。
 

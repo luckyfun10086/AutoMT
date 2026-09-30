@@ -90,9 +90,14 @@ API key and a model name — quality is dramatically better than MT, at API cost
 | **Gemini** (OpenAI-compat) | `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` | `gemini-2.0-flash` |
 | **Ollama** (local, no key) | `http://localhost:11434/v1/chat/completions` | `qwen2.5:7b` |
 
-The tool sends a fixed translator system prompt (source/target language, "output only the
-translation", keep `〔T…〕` tokens unchanged). AI mode translates one string per request —
-slower but the masking pipeline guarantees format safety either way.
+**Error prompts & sensitive-word fallback**: connection problems are classified into
+three kinds with clear bilingual messages — *fatal* (401 wrong key / 402 insufficient
+balance / 404 bad model: stops immediately with a dialog, no wasted retries), *skip*
+(content blocked by the provider's safety policy), and *retry* (429 rate-limit / network
+hiccups: automatic backoff). Blocked strings are automatically **retried via the built-in
+free MT endpoint** (which has no content filter) — lower quality than AI but far better
+than leaving English; the run summary reports how many were salvaged. Disable with
+`MT_FALLBACK=0`.
 
 Equivalent `.env` keys are documented in [`.env.example`](.env.example).
 

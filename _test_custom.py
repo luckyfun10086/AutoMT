@@ -87,4 +87,101 @@ assert ok == 1 and drop == 0
 assert '\\c[2]code' in out['AI test with \\c[2]code\\nline2']
 srv2.shutdown()
 shutil.rmtree(tmp)
+
+# 4) 错误分类：402 余额不足→致命中止；敏感词→跳过保原文；正常→照翻
+class ERR(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        n = int(self.headers.get('Content-Length', 0))
+        user = json.loads(self.rfile.read(n))['messages'][1]['content']
+
+        def send(code, obj):
+            body = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        if 'BLOCKFATAL' in user:
+            send(402, {'error': {'message': 'Insufficient Balance'}})
+        elif 'BLOCKSKIP' in user:
+            send(400, {'error': {'message': 'Content blocked by content policy',
+                                 'type': 'content_policy_violation'}})
+        else:
+            send(200, {'choices': [{'message': {'content': '【AI】' + user}}]})
+    def log_message(self, *a):
+        pass
+
+srv3 = http.server.HTTPServer(('127.0.0.1', 18779), ERR)
+threading.Thread(target=srv3.serve_forever, daemon=True).start()
+EP = 'http://127.0.0.1:18779/v1/chat/completions'
+
+# 4a) 敏感词：单条跳过，整体继续
+tmp = tempfile.mkdtemp()
+src = os.path.join(tmp, 'f.json')
+json.dump({'hello world': '', 'BLOCKSKIP sensitive line': '', 'second normal': ''},
+          open(src, 'w', encoding='utf-8'), ensure_ascii=False)
+logs = []
+pipe = mt_gui.Pipe(src, os.path.join(tmp, 'w'), 'en', 'zh-CN', threading.Event(),
+                   lambda s, d, t, n: None, logs.append,
+                   endpoint=EP, api_key='k', api_type='openai', model='m',
+                   fallback=False)
+dst, ok, drop = pipe.run()
+out = json.load(open(dst, encoding='utf-8'))
+assert out['BLOCKSKIP sensitive line'] == '', '敏感词条应留空'
+assert out['hello world'].startswith('【AI】') and out['second normal'].startswith('【AI】')
+assert pipe.policy_skips == 1
+print('敏感词跳过 ✓  policy_skips =', pipe.policy_skips)
+shutil.rmtree(tmp)
+
+# 4b) 402 余额不足：致命，立即中止（不重试 5 次）
+import time as _t
+tmp = tempfile.mkdtemp()
+src = os.path.join(tmp, 'f.json')
+json.dump({'BLOCKFATAL line': ''}, open(src, 'w', encoding='utf-8'), ensure_ascii=False)
+t0 = _t.time()
+pipe = mt_gui.Pipe(src, os.path.join(tmp, 'w'), 'en', 'zh-CN', threading.Event(),
+                   lambda s, d, t, n: None, lambda m: None,
+                   endpoint=EP, api_key='k', api_type='openai', model='m')
+try:
+    pipe.run()
+    raise AssertionError('应抛出致命错误')
+except mt_config.ApiError as e:
+    assert e.kind == 'fatal' and '余额' in e.args[0] or 'Insufficient' in e.args[0], e.args
+    assert _t.time() - t0 < 10, '致命错误应立即中止而非重试5次'
+    print('402 致密中止 ✓  消息:', e.args[0][:50])
+shutil.rmtree(tmp)
+# 4a-2) 敏感词 → 免费机翻兜底重译（fallback_endpoint 指向本地 GET 模拟端点）
+class FB(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)['q'][0]
+        body = json.dumps(['【兜底】' + q]).encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, *a):
+        pass
+
+srv4 = http.server.HTTPServer(('127.0.0.1', 18780), FB)
+threading.Thread(target=srv4.serve_forever, daemon=True).start()
+
+tmp = tempfile.mkdtemp()
+src = os.path.join(tmp, 'f.json')
+json.dump({'hello world': '', 'BLOCKSKIP sensitive line': ''},
+          open(src, 'w', encoding='utf-8'), ensure_ascii=False)
+pipe = mt_gui.Pipe(src, os.path.join(tmp, 'w'), 'en', 'zh-CN', threading.Event(),
+                   lambda s, d, t, n: None, lambda m: None,
+                   endpoint=EP, api_key='k', api_type='openai', model='m',
+                   fallback_endpoint='http://127.0.0.1:18780/t?q={q}')
+dst, ok, drop = pipe.run()
+out = json.load(open(dst, encoding='utf-8'))
+assert out['BLOCKSKIP sensitive line'].startswith('【兜底】'), out['BLOCKSKIP sensitive line']
+assert out['hello world'].startswith('【AI】')
+assert pipe.policy_skips == 1 and pipe.fallback_saved == 1
+print('敏感词→机翻兜底 ✓  fallback_saved =', pipe.fallback_saved)
+shutil.rmtree(tmp)
+srv4.shutdown()
+srv3.shutdown()
 print('ALL TESTS PASS')

@@ -32,6 +32,26 @@ BUILTIN = API_TYPE == "get" and ENDPOINT == mt_config.DEFAULT_ENDPOINT
 SEG = "--seg" in sys.argv
 segre = re.compile(r"(〔T[0-9a-f]{8}〕)")
 
+POLICY_SKIPS = [0]
+FALLBACK_SAVED = [0]
+FALLBACK = ENV.get("MT_FALLBACK", "1") != "0" \
+    and not (API_TYPE == "get" and ENDPOINT == mt_config.DEFAULT_ENDPOINT)
+
+def _fallback(text):
+    if not FALLBACK:
+        return None
+    try:
+        r = mt_config.translate_once(text, SL, TL,
+                                     endpoint=mt_config.DEFAULT_ENDPOINT, api_type="get")
+        if isinstance(r, str) and r.strip():
+            FALLBACK_SAVED[0] += 1
+            if FALLBACK_SAVED[0] == 1:
+                print("[fallback] 内容拦截 → 免费机翻兜底 / blocked string via free MT")
+            return r
+    except Exception:
+        pass
+    return None
+
 def mt(text, tries=5):
     for a in range(tries):
         try:
@@ -39,10 +59,24 @@ def mt(text, tries=5):
                 text, SL, TL, endpoint=ENDPOINT,
                 api_key=ENV.get("MT_API_KEY"), api_header=ENV.get("MT_API_HEADER"),
                 api_type=API_TYPE, model=MODEL)
+        except mt_config.ApiError as e:
+            if e.kind == "fatal":
+                print("\n[错误] " + e.args[0])
+                sys.exit(2)
+            if e.kind == "skip":
+                POLICY_SKIPS[0] += 1
+                if POLICY_SKIPS[0] == 1:
+                    print("[提示] " + e.args[0] + "（同类拦截不再逐条提示）")
+                r = _fallback(text)
+                return r if r is not None else ""
+            if a == tries - 1:
+                raise
+            time.sleep(3 + 3 * a + random.random() * 2)
         except Exception:
             if a == tries - 1:
                 raise
             time.sleep(3 + 3 * a + random.random() * 2)
+    return ""
 
 def mt_batch(qs, tries=5):
     if not BUILTIN:

@@ -133,7 +133,7 @@ class Pipe:
     """三段式管线；cb(stage, done, total, note)；log(msg)"""
     def __init__(self, src_json, workdir, sl, tl, cancel, cb, log,
                  endpoint=None, api_key=None, api_header=None, auto_names=True, lang="zh",
-                 api_type="get", model=None):
+                 api_type="get", model=None, fallback=True, fallback_endpoint=None):
         self.src, self.work, self.sl, self.tl = src_json, workdir, sl, tl
         self.cancel, self.cb, self.log = cancel, cb, log
         self.api_type = api_type
@@ -143,6 +143,10 @@ class Pipe:
         self.endpoint = (endpoint or "").strip() or mt_config.DEFAULT_ENDPOINT
         self.headers = mt_config.build_headers(api_key, api_header)
         self.auto_names = auto_names
+        self.fallback = fallback
+        self.fallback_endpoint = (fallback_endpoint or "").strip() or mt_config.DEFAULT_ENDPOINT
+        self.policy_skips = 0
+        self.fallback_saved = 0
         self.L = S[lang if lang in S else "zh"]
 
     def load_names(self):
@@ -242,16 +246,53 @@ class Pipe:
             if self.cancel.is_set():
                 raise Cancel()
             try:
-                return mt_config.translate_once(
+                r = mt_config.translate_once(
                     text, self.sl, self.tl, endpoint=self.endpoint,
                     api_key=self.api_key, api_header=self.api_header,
                     api_type=self.api_type, model=self.model)
+                return r
             except Cancel:
                 raise
+            except mt_config.ApiError as e:
+                if e.kind == "fatal":
+                    raise                      # 401/402/404：立即终止，不浪费重试
+                if e.kind == "skip":
+                    # 敏感词被服务方拦截 → 机翻免费端点兜底（不审查内容）
+                    self.policy_skips += 1
+                    if self.policy_skips == 1:
+                        self.log(e.args[0] + "（后续同类拦截不再逐条提示，结束时汇总）")
+                    r = self._fallback_translate(text)
+                    if r is not None:
+                        return r
+                    return ""                  # 兜底也失败：留空保原文
+                if a == tries - 1:             # retry：退避重试
+                    raise
+                time.sleep(3 + 3 * a + random.random() * 2)
             except Exception:
                 if a == tries - 1:
                     raise
                 time.sleep(3 + 3 * a + random.random() * 2)
+        return ""
+
+    def _fallback_translate(self, text):
+        """主接口内容拦截后，用内置免费机翻端点兜底；成功返回译文，失败返回 None。"""
+        if not self.fallback:
+            return None
+        if self.api_type == "get" and self.endpoint == self.fallback_endpoint:
+            return None                        # 主接口已是免费端点，无路可退
+        try:
+            r = mt_config.translate_once(text, self.sl, self.tl,
+                                         endpoint=self.fallback_endpoint,
+                                         api_type="get")
+            if isinstance(r, str) and r.strip():
+                self.fallback_saved += 1
+                if self.fallback_saved == 1:
+                    self.log("[fallback] 内容拦截 → 已自动改用免费机翻兜底 "
+                             "(quality=MT) / blocked string retranslated via free MT")
+                return r
+        except Exception:
+            pass
+        return None
 
     def mt_batch(self, qs, tries=5):
         """多条合并请求——仅内置谷歌端点支持；自定义/AI 接口自动退化为逐条"""
@@ -393,6 +434,15 @@ class Pipe:
             self.log(self.L["no_trans"])
             return dst, 0, 0
         masked = self.translate(masked)
+        if self.policy_skips:
+            msg = (f"[safety-policy] {self.policy_skips} blocked by content policy"
+                   f" / {self.policy_skips} 条被内容策略拦截")
+            if self.fallback_saved:
+                msg += (f"；其中 {self.fallback_saved} 条已由免费机翻兜底重译"
+                        f" / {self.fallback_saved} salvaged via free MT")
+            else:
+                msg += "，保持原文 / kept as original"
+            self.log(msg)
         return self.apply(masked, tokens)
 
 # ---------------- GUI ----------------
@@ -686,6 +736,8 @@ class App:
             self.q.put(("done", (dst, ok, drop)))
         except Cancel:
             self.q.put(("cancelled", None))
+        except mt_config.ApiError as e:
+            self.q.put(("error", e.args[0]))   # 友好双语提示，非 traceback
         except Exception:
             self.q.put(("error", traceback.format_exc()))
 

@@ -20,41 +20,95 @@ DEFAULT_ENDPOINT = ("https://clients5.google.com/translate_a/t"
                     "?client=dict-chrome-ex&sl={sl}&tl={tl}&q={q}")
 
 ENV_KEYS = ("MT_ENDPOINT", "MT_API_KEY", "MT_API_HEADER", "MT_SL", "MT_TL",
-            "MT_AUTO_NAMES", "MT_LANG", "MT_API_TYPE", "MT_MODEL")
+            "MT_AUTO_NAMES", "MT_LANG", "MT_API_TYPE", "MT_MODEL", "MT_FALLBACK")
+
+class ApiError(Exception):
+    """kind: 'fatal' 立即终止（401/402/404 等，重试无意义）
+            'skip'  跳过该条保持原文（内容安全策略拦截）
+            'retry' 可重试（限流/网络抖动）"""
+    def __init__(self, kind, msg):
+        super().__init__(msg)
+        self.kind = kind
+
+def classify_error(exc, body=""):
+    """把底层异常翻译成 (kind, 双语友好提示)。body 为 HTTP 响应体（若有）。"""
+    code = getattr(exc, "code", None)
+    text = (body or "")[:800].lower()
+    if code == 401 or "invalid api key" in text or "invalid_api_key" in text \
+            or "incorrect api key" in text or "authentication" in text and "fail" in text:
+        return "fatal", "API Key 无效或未填写（401 Invalid API key）——请检查 Key / Invalid API key"
+    if code == 402 or "insufficient" in text or "balance" in text or "quota" in text \
+            or "arrearage" in text or "余额" in text:
+        return "fatal", ("账户余额/配额不足（402 Insufficient balance/quota）——"
+                         "请充值或更换 Key / Insufficient balance or quota")
+    if code == 404 or ("model" in text and "not found" in text) or "does not exist" in text:
+        return "fatal", "模型不存在（404 Model not found）——请检查 Model 名称 / Model not found"
+    if "content_policy" in text or "content policy" in text or "content_filter" in text \
+            or "sensitive" in text or "敏感" in text or "blocked by" in text and "policy" in text:
+        return "skip", ("内容被服务方安全策略拦截（敏感词）——该条保持原文 / "
+                        "Content blocked by provider safety policy, string kept as-is")
+    if code == 429 or "rate" in text and "limit" in text:
+        return "retry", "请求过快被限流（429）——自动退避重试 / Rate limited, backing off"
+    if "html" in text[:200] or "<html" in text[:200].lower() or code == 403:
+        return "retry", ("端点返回异常（可能被反爬/接口变更 403）——将重试，"
+                         "持续失败请更换接口 / Endpoint returned unexpected content")
+    return "retry", f"{type(exc).__name__}: {exc}"
 
 def translate_once(text, sl, tl, endpoint=None, api_key=None, api_header=None,
                    api_type="get", model=None, timeout=30, opener=None):
     """统一翻译调用。
     api_type='get'    —— 机翻：GET 模板端点（{sl}/{tl}/{q} 占位符）
     api_type='openai' —— AI 翻译：OpenAI 兼容 chat/completions（POST + JSON）
+    网络/鉴权类错误统一转成 ApiError(kind, 双语提示)。
     """
     import urllib.request
+    import urllib.error
     opener = opener or urllib.request.urlopen
-    if api_type == "openai":
-        url = (endpoint or "").strip()
-        if not url:
-            raise ValueError("AI 翻译需要填写完整接口地址，例如 https://api.deepseek.com/chat/completions")
-        sys_prompt = ("You are a professional game translator. Translate the user's text "
-                      f"from {sl} to {tl}. Output ONLY the translation, nothing else. "
-                      "Keep placeholder tokens like 〔T1a2b3c4〕 EXACTLY unchanged and in "
-                      "the corresponding places. Preserve line breaks where they appear as tokens.")
-        body = json.dumps({
-            "model": model or "gpt-4o-mini",
-            "messages": [{"role": "system", "content": sys_prompt},
-                         {"role": "user", "content": text}],
-            "temperature": 0.3,
-        }).encode("utf-8")
-        headers = {"Content-Type": "application/json"}
-        if api_key:
-            h = (api_header or "Authorization").strip() or "Authorization"
-            headers[h] = f"Bearer {api_key}" if h.lower() == "authorization" else api_key
-        req = urllib.request.Request(url, data=body, headers=headers, method="POST")
-        with opener(req, timeout=max(timeout, 120)) as r:
+
+    def run():
+        if api_type == "openai":
+            url = (endpoint or "").strip()
+            if not url:
+                raise ApiError("fatal", "AI 翻译需要填写完整接口地址，"
+                               "例如 https://api.deepseek.com/chat/completions / URL is empty")
+            sys_prompt = ("You are a professional game translator. Translate the user's text "
+                          f"from {sl} to {tl}. Output ONLY the translation, nothing else. "
+                          "Keep placeholder tokens like 〔T1a2b3c4〕 EXACTLY unchanged and in "
+                          "the corresponding places. Preserve line breaks where they appear as tokens.")
+            body = json.dumps({
+                "model": model or "gpt-4o-mini",
+                "messages": [{"role": "system", "content": sys_prompt},
+                             {"role": "user", "content": text}],
+                "temperature": 0.3,
+            }).encode("utf-8")
+            headers = {"Content-Type": "application/json"}
+            if api_key:
+                h = (api_header or "Authorization").strip() or "Authorization"
+                headers[h] = f"Bearer {api_key}" if h.lower() == "authorization" else api_key
+            req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+            with opener(req, timeout=max(timeout, 120)) as r:
+                return parse_response(r.read().decode("utf-8", "replace"))
+        url = build_url(endpoint or DEFAULT_ENDPOINT, text, sl, tl)
+        req = urllib.request.Request(url, headers=build_headers(api_key, api_header))
+        with opener(req, timeout=timeout) as r:
             return parse_response(r.read().decode("utf-8", "replace"))
-    url = build_url(endpoint or DEFAULT_ENDPOINT, text, sl, tl)
-    req = urllib.request.Request(url, headers=build_headers(api_key, api_header))
-    with opener(req, timeout=timeout) as r:
-        return parse_response(r.read().decode("utf-8", "replace"))
+
+    try:
+        return run()
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read().decode("utf-8", "replace")
+        except Exception:
+            body = ""
+        kind, msg = classify_error(e, body)
+        raise ApiError(kind, msg) from None
+    except urllib.error.URLError as e:
+        raise ApiError("retry", f"网络错误（{e.reason}）——将重试 / Network error, retrying") from None
+    except ApiError:
+        raise
+    except Exception as e:
+        kind, msg = classify_error(e)
+        raise ApiError(kind, msg) from None
 
 def base_dir():
     """exe 旁边（PyInstaller 打包后 __file__ 在临时目录，须用 exe 自身位置）"""
