@@ -85,8 +85,18 @@ Bob               不写 = 号则保持英文原样
 
 ## 独立 RPG Maker 提取（无需 MTool）
 
-RPG Maker MV/MZ 的全部文本都在游戏目录 `data/*.json` 里（MV 为 `www/data`），
-AutoMT 可直接提取与回写，全程无需第三方工具：
+**支持的引擎：**
+
+| 引擎 | 数据位置 | 支持状态 |
+|------|----------|----------|
+| RPG Maker **MZ** | `data/` | ✅ 完整支持 |
+| RPG Maker **MV** | `www/data/`（部分发行版在 `data/`） | ✅ 完整支持 |
+| RPG Maker VX Ace / VX / XP | `.rvdata2` 二进制文件 | ❌ 不支持（二进制序列化格式） |
+| Wolf RPG Editor | `.wolf` 封包 | ❌ 不支持 |
+
+MV/MZ 的全部游戏文本都是明文 JSON（`Map*.json`、`CommonEvents.json`、
+`Troops.json` 等），AutoMT 直接读写，全程无需第三方工具；VX Ace 及更早引擎请
+改用 MTool。
 
 ```
 python rpg_extract.py <游戏目录>      # → game.extracted.json

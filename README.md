@@ -97,8 +97,18 @@ work in every mode.
 
 ## Standalone RPG Maker Extraction (no MTool needed)
 
-RPG Maker MV/MZ games keep all text in `data/*.json` (`www/data` for MV) — AutoMT can
-extract and patch it directly, no third-party tool required:
+**Supported engines:**
+
+| Engine | Data location | Status |
+|--------|---------------|--------|
+| RPG Maker **MZ** | `data/` | ✅ fully supported |
+| RPG Maker **MV** | `www/data/` (or `data/` in some distributions) | ✅ fully supported |
+| RPG Maker VX Ace / VX / XP | `.rvdata2` binary files | ❌ not supported (binary Marshal format) |
+| Wolf RPG Editor | `.wolf` archives | ❌ not supported |
+
+MV/MZ store all game text as plain JSON (`Map*.json`, `CommonEvents.json`,
+`Troops.json`, …) — AutoMT reads and patches them directly, no third-party tool
+required. For VX Ace and older engines, use MTool instead.
 
 ```
 python rpg_extract.py <game-folder>     # → game.extracted.json

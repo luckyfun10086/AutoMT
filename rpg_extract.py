@@ -2,7 +2,10 @@
 """
 RPG Maker MV/MZ 独立文本提取器（无需 MTool）
 =============================================
-直接读取游戏目录下 data/*.json（MV 在 www/data，MZ 在 data），
+支持引擎：RPG Maker MZ (data/) 与 RPG Maker MV (www/data/，部分发行版在 data/)。
+不支持：VX Ace 及更早（.rvdata2 二进制）、Wolf RPG（.wolf 封包）——请改用 MTool。
+
+直接读取游戏目录下 data/*.json，
 提取 对话(401)/滚动文本(405)/选项(102)/改名(320,324)/地图名，
 输出 AutoMT 管线兼容的 {"原文": ""} 文件。
 
