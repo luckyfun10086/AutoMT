@@ -11,9 +11,11 @@ endpoint by default — **no API key, no quota, no content filtering** — or pl
 your own DeepL/LLM API via the GUI (credentials stored in a local `.env`, never
 committed).
 
-> [MTool](https://mtool.app/) — the excellent game translation & modification tool
-> whose JSON format this project originally automated (closed-source, mtool.app);
-> standalone engine support came later and outgrew the name.
+> [MTool](https://mtool.app/) — an excellent **third-party** game translation &
+> > modification tool (made by others, closed-source, mtool.app; unrelated to this
+> > repository's author). This project started out automating its exported JSON files;
+> > standalone engine support came later, outgrew the original name AutoMT, and the
+> > tool became OmniTrans.
 
 Validated in the field: a 70,000+ string MTool corpus; Kirikiri on three real games
 (17 archives / 22,806 files / up to 44,296 segments per game); Ren'Py against the

@@ -8,8 +8,9 @@ Kirikiri、Ren'Py、TyranoScript、Unity——自动识别引擎，提取文本 
 `ManualTransFile.json`。默认走内置免费端点（公开、无需密钥、不审查内容），也可在
 界面里填入**你自己的 DeepL/LLM 翻译接口**（保存在本机 `.env`，绝不入库）。
 
-> [MTool](https://mtool.app/) —— 本项目最初为之打造的翻译工具（其 JSON 格式是
-> 起点之一，非开源，官网 mtool.app）；后来的全引擎独立支持让工具长过了旧名字。
+> [MTool](https://mtool.app/) —— **他人开发的**第三方游戏翻译修改工具（非开源，
+> > 官网 mtool.app），与本仓库作者无关。本项目的起点只是自动机翻它导出的 JSON 文件；
+> > 后来的全引擎独立支持让本项目长过了旧名字 AutoMT，遂更名为 OmniTrans。
 
 实弹验证：7 万+条 MTool 语料；Kirikiri 在 3 个真实游戏上验证（17 封包 / 22,806 文件 /
 单游戏最多 44,296 段）；Ren'Py 与 SDK 官方法语翻译交叉验证（788/788 语句标识符全中）；
