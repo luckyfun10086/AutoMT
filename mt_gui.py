@@ -526,7 +526,7 @@ class App:
         row1.pack(fill="x")
         self.lbl_src = ttk.Label(row1, text=self.T("src"))
         self.lbl_src.pack(side="left")
-        self.sl_var = tk.StringVar(value="English")
+        self.sl_var = tk.StringVar(value="Auto · 自动")
         names_list = [n for n, _ in LANGS]
         ttk.Combobox(row1, textvariable=self.sl_var, values=names_list,
                      width=11, state="readonly").pack(side="left", padx=(4, 10))
