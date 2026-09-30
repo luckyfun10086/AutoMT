@@ -34,7 +34,7 @@ S = {
         "url": "URL:", "key": "Key:", "header": "请求头:",
         "save_env": "保存到 .env",
         "api_hint": "MT·GET：URL 用 {sl}/{tl}/{q} 占位符，留默认=免费端点 | AI·OpenAI：URL 填 chat/completions 地址+模型名，支持 DeepSeek/Kimi/GLM/OpenRouter/Ollama 等",
-        "drop": "把 ManualTransFile.json 拖到这里\n（或点击选择文件）",
+        "drop": "拖入 ManualTransFile.json 或游戏目录\n（或点击选择文件）",
         "drop_nodnd": "\n（提示：pip install tkinterdnd2 可启用拖拽）",
         "start": "开始翻译", "cancel": "取消", "open_out": "打开输出文件夹",
         "waiting": "等待文件…", "ready": "已就绪：{}", "done_stage": "③ 完成！",
@@ -72,7 +72,7 @@ S = {
         "url": "URL:", "key": "Key:", "header": "Header:",
         "save_env": "Save to .env",
         "api_hint": "MT·GET: URL with {sl}/{tl}/{q} placeholders, default = free endpoint | AI·OpenAI: full chat/completions URL + model (DeepSeek/Kimi/GLM/OpenRouter/Ollama…)",
-        "drop": "Drop ManualTransFile.json here\n(or click to browse)",
+        "drop": "Drop ManualTransFile.json or a game folder here\n(or click to browse)",
         "drop_nodnd": "\n(tip: pip install tkinterdnd2 enables drag & drop)",
         "start": "Start", "cancel": "Cancel", "open_out": "Open output folder",
         "waiting": "Waiting for a file…", "ready": "Ready: {}", "done_stage": "③ Done!",
@@ -681,15 +681,71 @@ class App:
     def on_drop(self, path):
         path = path.strip().strip('"')
         if not path.lower().endswith(".json"):
-            messagebox.showerror(self.T("msg_type"), self.T("msg_type_b"))
-            return
+            # 不是 json → 尝试引擎识别（目录或 exe）
+            eng, name, ok, reason = mt_config.detect_engine(path)
+            if ok:
+                extract = mt_config.ENGINE_EXTRACTORS.get(eng)
+                if extract:
+                    if messagebox.askyesno(
+                            f"✅ {name}",
+                            f"检测到 {name}，是否自动提取文本？\n\n"
+                            f"将运行 {extract}（可能需要几分钟）"):
+                        self._run_extractor(path, extract)
+                        return
+            else:
+                messagebox.showwarning(
+                    f"❌ {name} — 不支持",
+                    f"引擎：{name}\n\n{reason}")
+                self.log(f"[engine] {name}: 不支持 — {reason}")
+                return
         self.set_file(path)
+
+    def _run_extractor(self, game_path, script):
+        import subprocess
+        base = mt_config.base_dir()
+        script_path = os.path.join(base, script)
+        if not os.path.exists(script_path):
+            messagebox.showerror("Error", f"脚本不存在: {script_path}")
+            return
+        self.log(f"[extract] 运行 {script} {game_path}")
+        self.stage_var.set("提取中… / Extracting…")
+        self.bar["value"] = 0
+        def worker():
+            try:
+                r = subprocess.run(
+                    [sys.executable, script_path, game_path],
+                    cwd=base, capture_output=True, text=True,
+                    encoding="utf-8", errors="replace", timeout=600)
+                output = (r.stdout or "") + (r.stderr or "")
+                self.log(f"[extract] 退出码 {r.returncode}")
+                for line in output.strip().splitlines()[-5:]:
+                    self.log(f"  | {line}")
+                if r.returncode == 0:
+                    # 找最新生成的 *_extracted.json
+                    import glob as g
+                    cands = sorted(g.glob(os.path.join(base, "*_extracted*.json")),
+                                   key=os.path.getmtime, reverse=True)
+                    if cands:
+                        newest = cands[0]
+                        self.q.put(("extracted", newest))
+                    else:
+                        self.q.put(("error", "提取完成但未找到输出文件"))
+                else:
+                    self.q.put(("error", output[-800:] if output else f"exit {r.returncode}"))
+            except subprocess.TimeoutExpired:
+                self.q.put(("error", "提取超时（10分钟），请手动运行脚本"))
+            except Exception as e:
+                self.q.put(("error", str(e)))
+        threading.Thread(target=worker, daemon=True).start()
 
     def pick(self):
         p = filedialog.askopenfilename(title=self.T("sel_file"),
-                                       filetypes=[("JSON", "*.json"), ("All files", "*.*")])
+                                       filetypes=[("JSON", "*.json"), ("Executable", "*.exe"),
+                                                  ("All files", "*.*")])
+        if not p:
+            p = filedialog.askdirectory(title="Select game folder / 游戏目录")
         if p:
-            self.set_file(p)
+            self.on_drop(p)
 
     def set_file(self, p):
         self.src_file = p
@@ -803,6 +859,9 @@ class App:
                     self.start_btn.config(state="normal")
                     self.cancel_btn.config(state="disabled")
                     self.log(self.T("log_cancelled"))
+                elif kind == "extracted":
+                    self.set_file(payload)
+                    self.log(f"[extract] 提取完成，已加载: {payload}")
                 elif kind == "error":
                     self.stage_var.set(self.T("error"))
                     self.start_btn.config(state="normal")

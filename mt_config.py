@@ -118,6 +118,57 @@ def load_loose_json(path):
                  r"\1\2", txt)                       # 行尾注释（字符串后）
     return json.loads(txt)
 
+# ---------- 引擎识别（拖拽游戏目录/EXE 时自动判引擎） ----------
+def detect_engine(path):
+    """传入游戏目录或 exe 路径，返回 (engine_key, display_name, supported, reason)"""
+    game_dir = path if os.path.isdir(path) else os.path.dirname(path)
+    files = set(os.listdir(game_dir)) if os.path.isdir(game_dir) else set()
+
+    # --- 逐引擎签名匹配（顺序：最具体的在前） ---
+    # ExHIBIT 私有引擎
+    if any(f.endswith(".rld") for f in files) or "ExHIBIT.ini" in files:
+        return ("exhibit", "ExHIBIT 私有引擎", False,
+                "私有二进制格式（.rld/.rnf），无公开文档，静态提取不可行。请使用 MTool 运行时翻译。")
+    # Kirikiri
+    if any(f.endswith(".xp3") for f in files):
+        return ("kirikiri", "Kirikiri (吉里吉里)", False,
+                "暂不支持。可用 GARbro / Translator++ 解包 .xp3 → 导出脚本 → AutoMT 翻 JSON。")
+    # Wolf RPG
+    if any(f.endswith(".wolf") for f in files) or "wolf.dat" in files:
+        return ("wolf", "Wolf RPG Editor", False,
+                "暂不支持（.wolf 封包格式）。请使用 MTool 或 WolfTrans。")
+    # RPG Maker VX Ace / VX / XP
+    if any(f.endswith(".rvdata2") for f in files) or any(f.endswith(".rvdata") for f in files):
+        return ("rpg_vxace", "RPG Maker VX Ace / VX / XP", False,
+                "不支持（.rvdata2 二进制 Marshal 格式）。请使用 MTool。")
+    # RPG Maker MV / MZ
+    for sub in ("data", "www/data"):
+        p = os.path.join(game_dir, sub)
+        if os.path.isdir(p):
+            if any(f.startswith("Map") and f.endswith(".json") for f in os.listdir(p)):
+                return ("rpg_mvmz", "RPG Maker MV/MZ", True, "")
+    # SRPG Studio
+    if "data.dts" in files and ("runtime.rts" in files or "environment.evs" in files):
+        return ("srpg_studio", "SRPG Studio", True, "")
+    # Unity
+    for f in files:
+        if f.endswith("_Data") and os.path.isdir(os.path.join(game_dir, f)):
+            return ("unity", "Unity", True, "")
+    # Ren'Py
+    if any(f.endswith(".rpa") for f in files) or any(f.endswith(".rpyc") for f in files):
+        return ("renpy", "Ren'Py", False,
+                "暂不支持（.rpa/.rpyc）。可用 UnRen 解包 → AutoMT 翻脚本。")
+    # 未知
+    return ("unknown", "未知引擎", False,
+            "无法识别引擎。如果是 MTool 导出的 json 请直接拖 json 文件。")
+
+# 支持的引擎 → 提取脚本
+ENGINE_EXTRACTORS = {
+    "rpg_mvmz": "rpg_extract.py",
+    "srpg_studio": "srpg_extract.py",
+    "unity": "unity_extract.py",
+}
+
 def base_dir():
     """exe 旁边（PyInstaller 打包后 __file__ 在临时目录，须用 exe 自身位置）"""
     if getattr(sys, "frozen", False):
