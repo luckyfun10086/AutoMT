@@ -694,17 +694,13 @@ class App:
             # 不是 json → 尝试引擎识别（目录或 exe）
             eng, name, ok, reason = mt_config.detect_engine(path)
             if ok:
-                extract = mt_config.ENGINE_EXTRACTORS.get(eng)
+                extract = mt_config.engine_extractor(eng)
                 if extract:
                     # 记录游戏信息（后续回写用）
                     self.game_path = path if os.path.isdir(path) else os.path.dirname(path)
                     self.game_engine = eng
                     self.game_extract_script = extract
-                    self.apply_script = {
-                        "rpg_mvmz": "rpg_apply.py",
-                        "srpg_studio": "srpg_apply.py",
-                        "unity": "unity_apply.py",
-                    }.get(eng)
+                    self.apply_script = mt_config.engine_applier(eng)
                     # Unity 引擎需检查 UnityPy
                     if eng == "unity":
                         if not self._check_and_install_unitypy():

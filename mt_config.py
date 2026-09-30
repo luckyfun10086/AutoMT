@@ -118,56 +118,135 @@ def load_loose_json(path):
                  r"\1\2", txt)                       # 行尾注释（字符串后）
     return json.loads(txt, strict=False)             # strict=False: 允许字符串内的原始控制字符
 
-# ---------- 引擎识别（拖拽游戏目录/EXE 时自动判引擎） ----------
+# ---------- 引擎注册表（识别/提取/回写/依赖 统一登记，GUI 与 CLI 共用） ----------
+# 字段：name 显示名 / supported 是否支持静态提取回写 / extractor+applier 脚本 /
+#       deps 依赖（pip 包名列表）/ detect 判定函数（入参 game_dir, files → bool）
+def _has_ext(files, *exts):
+    return any(f.lower().endswith(exts) for f in files)
+
+def _det_kirikiri(game_dir, files):
+    # .xp3 封包（也可能藏在 exe 同级；data.xp3/patch*.xp3 最常见）
+    return _has_ext(files, ".xp3")
+
+def _det_vxace(game_dir, files):
+    # .rvdata2(VX Ace) / .rvdata(VX) / Data/*.rxdata(XP) —— Data 目录判定兜底
+    if _has_ext(files, ".rvdata2", ".rvdata"):
+        return True
+    d = os.path.join(game_dir, "Data")
+    return os.path.isdir(d) and _has_ext(set(os.listdir(d)), ".rxdata", ".rvdata2", ".rvdata")
+
+def _det_mvmz(game_dir, files):
+    for sub in ("data", "www/data"):
+        p = os.path.join(game_dir, sub)
+        if os.path.isdir(p) and any(f.startswith("Map") and f.endswith(".json")
+                                    for f in os.listdir(p)):
+            return True
+    return False
+
+def _det_srpg(game_dir, files):
+    return "data.dts" in files and ("runtime.rts" in files or "environment.evs" in files
+                                    or "game.exe" in files)
+
+def _det_unity(game_dir, files):
+    return any(f.endswith("_Data") and os.path.isdir(os.path.join(game_dir, f))
+               for f in files)
+
+def _det_renpy(game_dir, files):
+    if _has_ext(files, ".rpa", ".rpyc"):
+        return True
+    # 解包后的 Ren'Py：game/ 下有脚本
+    g = os.path.join(game_dir, "game")
+    return os.path.isdir(g) and _has_ext(set(os.listdir(g)), ".rpa", ".rpyc", ".rpy")
+
+def _det_tyrano(game_dir, files):
+    # TyranoScript：data/scenario/*.ks + tyrano.js（或 data/system 配置）
+    d = os.path.join(game_dir, "data", "scenario")
+    if os.path.isdir(d) and any(f.endswith(".ks") for f in os.listdir(d)):
+        return True
+    return any(f.lower() == "tyrano.js" for f in files)
+
+def _det_exhibit(game_dir, files):
+    return _has_ext(files, ".rld") or "ExHIBIT.ini" in files or "ExHIBIT.exe" in files
+
+def _det_wolf(game_dir, files):
+    return _has_ext(files, ".wolf") or "wolf.dat" in files
+
+def _det_siglus(game_dir, files):
+    # Key 社 SiglusEngine：Scene.pck / Gameexe.dat / SiglusEngine.exe
+    # （不泛匹配 *.pck：Godot 也用 .pck，会误判）
+    return "Scene.pck" in files or "Gameexe.dat" in files or any(
+        f.lower().startswith("siglusengine") for f in files)
+
+def _det_alicesoft(game_dir, files):
+    # AliceSoft：.ain 系统脚本 + .ex 资源
+    return _has_ext(files, ".ain") or _has_ext(files, ".ex")
+
+def _det_nscripter(game_dir, files):
+    # NScripter：nscript.dat / *.nsa
+    return "nscript.dat" in files or _has_ext(files, ".nsa")
+
+ENGINES = {
+    # ---- 已支持（提供 extract/apply 全链路） ----
+    "rpg_mvmz":   {"name": "RPG Maker MV/MZ", "supported": True,
+                   "extractor": "rpg_extract.py", "applier": "rpg_apply.py",
+                   "deps": [], "detect": _det_mvmz},
+    "rpg_vxace":  {"name": "RPG Maker VX Ace / VX / XP", "supported": True,
+                   "extractor": "rva_extract.py", "applier": "rva_apply.py",
+                   "deps": [], "detect": _det_vxace},
+    "srpg_studio": {"name": "SRPG Studio", "supported": True,
+                    "extractor": "srpg_extract.py", "applier": "srpg_apply.py",
+                    "deps": [], "detect": _det_srpg},
+    "kirikiri":   {"name": "Kirikiri (吉里吉里)", "supported": True,
+                   "extractor": "krkr_extract.py", "applier": "krkr_apply.py",
+                   "deps": [], "detect": _det_kirikiri},
+    "renpy":      {"name": "Ren'Py", "supported": True,
+                   "extractor": "renpy_extract.py", "applier": "renpy_apply.py",
+                   "deps": [], "detect": _det_renpy},
+    "tyrano":     {"name": "TyranoScript", "supported": True,
+                   "extractor": "tyrano_extract.py", "applier": "tyrano_apply.py",
+                   "deps": [], "detect": _det_tyrano},
+    "unity":      {"name": "Unity", "supported": True,
+                   "extractor": "unity_extract.py", "applier": "unity_apply.py",
+                   "deps": ["UnityPy"], "detect": _det_unity},
+    # ---- 可识别、暂不支持（给出替代方案） ----
+    "siglus":     {"name": "SiglusEngine (Key)", "supported": False, "detect": _det_siglus,
+                   "reason": "私有加密格式（Scene.pck）。请使用 MTool 运行时翻译。"},
+    "alice":      {"name": "AliceSoft (.ain/.ex)", "supported": False, "detect": _det_alicesoft,
+                   "reason": "私有二进制格式（.ain 系统脚本）。可用 AIN 系工具（如 aindec）配合 MTool。"},
+    "exhibit":    {"name": "ExHIBIT 私有引擎", "supported": False, "detect": _det_exhibit,
+                   "reason": "私有二进制格式（.rld/.rnf/.JP），无公开文档，静态提取不可行。请使用 MTool 运行时翻译。"},
+    "wolf":       {"name": "Wolf RPG Editor", "supported": False, "detect": _det_wolf,
+                   "reason": "暂不支持（.wolf 封包格式）。请使用 MTool 或 WolfTrans。"},
+    "nscripter":  {"name": "NScripter", "supported": False, "detect": _det_nscripter,
+                   "reason": "暂不支持（nscript.dat 加密封包）。可用 NSDEC 解包后翻译，或使用 MTool。"},
+}
+
+# 检测顺序：最具体的签名在前（避免 Unity 的 *_Data 等宽泛规则抢跑）
+_DETECT_ORDER = ["exhibit", "siglus", "nscripter", "kirikiri", "wolf", "rpg_vxace",
+                 "srpg_studio", "rpg_mvmz", "renpy", "tyrano", "alice", "unity"]
+
 def detect_engine(path):
     """传入游戏目录或 exe 路径，返回 (engine_key, display_name, supported, reason)"""
     game_dir = path if os.path.isdir(path) else os.path.dirname(path)
     files = set(os.listdir(game_dir)) if os.path.isdir(game_dir) else set()
-
-    # --- 逐引擎签名匹配（顺序：最具体的在前） ---
-    # ExHIBIT 私有引擎
-    if any(f.endswith(".rld") for f in files) or "ExHIBIT.ini" in files:
-        return ("exhibit", "ExHIBIT 私有引擎", False,
-                "私有二进制格式（.rld/.rnf），无公开文档，静态提取不可行。请使用 MTool 运行时翻译。")
-    # Kirikiri
-    if any(f.endswith(".xp3") for f in files):
-        return ("kirikiri", "Kirikiri (吉里吉里)", False,
-                "暂不支持。可用 GARbro / Translator++ 解包 .xp3 → 导出脚本 → AutoMT 翻 JSON。")
-    # Wolf RPG
-    if any(f.endswith(".wolf") for f in files) or "wolf.dat" in files:
-        return ("wolf", "Wolf RPG Editor", False,
-                "暂不支持（.wolf 封包格式）。请使用 MTool 或 WolfTrans。")
-    # RPG Maker VX Ace / VX / XP
-    if any(f.endswith(".rvdata2") for f in files) or any(f.endswith(".rvdata") for f in files):
-        return ("rpg_vxace", "RPG Maker VX Ace / VX / XP", False,
-                "不支持（.rvdata2 二进制 Marshal 格式）。请使用 MTool。")
-    # RPG Maker MV / MZ
-    for sub in ("data", "www/data"):
-        p = os.path.join(game_dir, sub)
-        if os.path.isdir(p):
-            if any(f.startswith("Map") and f.endswith(".json") for f in os.listdir(p)):
-                return ("rpg_mvmz", "RPG Maker MV/MZ", True, "")
-    # SRPG Studio
-    if "data.dts" in files and ("runtime.rts" in files or "environment.evs" in files):
-        return ("srpg_studio", "SRPG Studio", True, "")
-    # Unity
-    for f in files:
-        if f.endswith("_Data") and os.path.isdir(os.path.join(game_dir, f)):
-            return ("unity", "Unity", True, "")
-    # Ren'Py
-    if any(f.endswith(".rpa") for f in files) or any(f.endswith(".rpyc") for f in files):
-        return ("renpy", "Ren'Py", False,
-                "暂不支持（.rpa/.rpyc）。可用 UnRen 解包 → AutoMT 翻脚本。")
-    # 未知
+    for key in _DETECT_ORDER:
+        e = ENGINES[key]
+        try:
+            if e["detect"](game_dir, files):
+                return (key, e["name"], e["supported"], e.get("reason", ""))
+        except Exception:
+            continue
     return ("unknown", "未知引擎", False,
             "无法识别引擎。如果是 MTool 导出的 json 请直接拖 json 文件。")
 
-# 支持的引擎 → 提取脚本
-ENGINE_EXTRACTORS = {
-    "rpg_mvmz": "rpg_extract.py",
-    "srpg_studio": "srpg_extract.py",
-    "unity": "unity_extract.py",
-}
+# 兼容旧接口：支持的引擎 → 提取脚本
+def engine_extractor(key):
+    return ENGINES.get(key, {}).get("extractor")
+
+def engine_applier(key):
+    return ENGINES.get(key, {}).get("applier")
+
+ENGINE_EXTRACTORS = {k: e["extractor"] for k, e in ENGINES.items() if e.get("extractor")}
 
 # ---------- UnityPy 检测与安装（GUI 用；不在此 import UnityPy 以免 PyInstaller 打包） ----------
 def check_unitypy():
