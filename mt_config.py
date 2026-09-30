@@ -111,12 +111,12 @@ def translate_once(text, sl, tl, endpoint=None, api_key=None, api_header=None,
         raise ApiError(kind, msg) from None
 
 def load_loose_json(path):
-    """加载 MTool 翻译文件（trs）：宽容处理 BOM、CRLF、整行 // 注释。"""
-    txt = open(path, encoding="utf-8-sig").read()
+    """加载 MTool 翻译文件（trs）：宽容处理 BOM、CRLF、整行/行尾 // 注释、控制字符。"""
+    txt = open(path, encoding="utf-8-sig", errors="replace").read()
     txt = re.sub(r"(?m)^[ \t]*//.*$", "", txt)      # 整行注释
     txt = re.sub(r"(?m)^(.*?\"(?:[^\"\\\\]|\\\\.)*\")(\s*,?\s*)//[^\n]*$",
                  r"\1\2", txt)                       # 行尾注释（字符串后）
-    return json.loads(txt)
+    return json.loads(txt, strict=False)             # strict=False: 允许字符串内的原始控制字符
 
 # ---------- 引擎识别（拖拽游戏目录/EXE 时自动判引擎） ----------
 def detect_engine(path):

@@ -701,7 +701,7 @@ class App:
         self.set_file(path)
 
     def _run_extractor(self, game_path, script):
-        import subprocess
+        """在线程中 import 提取脚本并调用 main()——避免 subprocess 在打包 exe 里打开新窗口"""
         base = mt_config.base_dir()
         script_path = os.path.join(base, script)
         if not os.path.exists(script_path):
@@ -711,31 +711,32 @@ class App:
         self.stage_var.set("提取中… / Extracting…")
         self.bar["value"] = 0
         def worker():
+            import importlib.util
             try:
-                r = subprocess.run(
-                    [sys.executable, script_path, game_path],
-                    cwd=base, capture_output=True, text=True,
-                    encoding="utf-8", errors="replace", timeout=600)
-                output = (r.stdout or "") + (r.stderr or "")
-                self.log(f"[extract] 退出码 {r.returncode}")
-                for line in output.strip().splitlines()[-5:]:
-                    self.log(f"  | {line}")
-                if r.returncode == 0:
-                    # 找最新生成的 *_extracted.json
-                    import glob as g
-                    cands = sorted(g.glob(os.path.join(base, "*_extracted*.json")),
-                                   key=os.path.getmtime, reverse=True)
-                    if cands:
-                        newest = cands[0]
-                        self.q.put(("extracted", newest))
-                    else:
-                        self.q.put(("error", "提取完成但未找到输出文件"))
+                # 动态加载提取脚本
+                mod_name = script.replace(".py", "")
+                spec = importlib.util.spec_from_file_location(mod_name, script_path)
+                mod = importlib.util.module_from_spec(spec)
+                # 替换 sys.argv 让 main() 拿到游戏路径
+                old_argv = sys.argv
+                sys.argv = [script, game_path]
+                spec.loader.exec_module(mod)
+                # 调 main()
+                mod.main()
+                sys.argv = old_argv
+                # 找最新生成的 *_extracted.json
+                import glob as g
+                cands = sorted(g.glob(os.path.join(base, "*_extracted*.json")),
+                               key=os.path.getmtime, reverse=True)
+                if cands:
+                    newest = cands[0]
+                    self.q.put(("extracted", newest))
                 else:
-                    self.q.put(("error", output[-800:] if output else f"exit {r.returncode}"))
-            except subprocess.TimeoutExpired:
-                self.q.put(("error", "提取超时（10分钟），请手动运行脚本"))
+                    self.q.put(("error", "提取完成但未找到输出文件"))
+            except SystemExit:
+                pass    # 提取脚本可能用 sys.exit
             except Exception as e:
-                self.q.put(("error", str(e)))
+                self.q.put(("error", traceback.format_exc()[-800:]))
         threading.Thread(target=worker, daemon=True).start()
 
     def pick(self):
