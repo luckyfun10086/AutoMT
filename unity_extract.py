@@ -14,8 +14,15 @@ Unity 独立文本提取器
     unity_manifest.json        位置清单（回写用，勿删）
 """
 import json, sys, io, os, re, glob
-import UnityPy
 import mt_config
+
+try:
+    import UnityPy
+except ImportError:
+    print("⚠  Unity 引擎提取需要 UnityPy 库")
+    print("   安装 / Install:  pip install UnityPy")
+    print("   然后重新运行 / Then rerun")
+    sys.exit(1)
 
 JP = re.compile(r'[\u3040-\u30ff\u4e00-\u9fff]')
 PRINTABLE = re.compile(r'^[ -~\u3000-\u30ff\u4e00-\u9fff\uff00-\uffef'
