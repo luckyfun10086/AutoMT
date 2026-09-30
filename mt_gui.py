@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-AutoMT 上位机（GUI，中英双语）
-===============================
+AutoMT 上位机（GUI，中英双语，三大功能分区）
+=============================================
+- 标签页分区：⚡快速翻译（json 管线）/ 🎮游戏汉化（引擎识别→提取→翻译→导入）
+  / ⚙设置（翻译接口配置）
 - 顶部 中/EN 切换按钮，所有界面文字即时切换，选择持久化到 .env (MT_LANG)
-- 设置源/目标语言 → 拖拽 MTool 导出的 json → 自动 清洗-机翻-回填 → 实时进度
+- 拖拽 json 走翻译管线；拖游戏目录/EXE 自动识别引擎并切到游戏汉化页
 - 拖拽支持需要 tkinterdnd2：pip install tkinterdnd2（未装时用「选择文件」按钮）
 """
 import json, re, sys, io, os, time, queue, random, hashlib, threading, traceback
