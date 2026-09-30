@@ -143,6 +143,7 @@ work in every mode.
 | RPG Maker **MZ** | `data/` | ✅ fully supported |
 | RPG Maker **MV** | `www/data/` (or `data/` in some distributions) | ✅ fully supported |
 | **SRPG Studio** | `data.dts` (with `runtime.rts`/`environment.evs`) | ✅ fully supported — bridges [SRPG-ToolBox](https://github.com/Sinflower/SRPG-ToolBox) (MIT), auto-downloaded on first run |
+| **Unity** (TextAsset scenarios / MonoBehaviour strings / Addressables & Localization bundles) | `*_Data` + `StreamingAssets/**/*.bundle` | ✅ supported (needs `pip install UnityPy`; strings compiled into DLLs are out of scope) |
 | RPG Maker VX Ace / VX / XP | `.rvdata2` binary files | ❌ not supported (binary Marshal format) |
 | Wolf RPG Editor | `.wolf` archives | ❌ not supported |
 
@@ -182,6 +183,32 @@ original line boundaries (mismatched line counts are skipped, original kept); if
 it would otherwise override custom translations. Battle-tested on a 943 MB game
 (6,985 strings extracted → 26 marker translations applied → repacked → re-parsed
 to confirm).
+
+### Unity games
+
+```
+pip install UnityPy
+python unity_extract.py <game-folder>     # scan assets/levels/bundles → strings + manifest
+python mt_clean.py <game>_extracted.json && python mt_translate.py && python mt_apply.py <game>_extracted.json
+python unity_apply.py <game-folder> <game>_extracted_translated.json
+```
+
+Covers: TextAssets (JSON scenario files parsed value-by-value), strings embedded in
+MonoBehaviour data (works even for IL2CPP builds without typetrees, via length-prefix
+scanning), and `.bundle` files under StreamingAssets (incl. Addressables and Unity
+Localization string tables). TMP layout tables (LineBreaking etc.) are auto-excluded.
+
+Safety: writes go to a temp file first and are swapped in atomically (originals are
+never truncated before the new data is fully produced); every modified file is backed
+up to `.automt.bak`; byte-prefix rebuilds are validated and skipped on mismatch.
+Battle-tested on an IL2CPP + Addressables game (283 strings extracted → 68 patched →
+re-extraction found every marker back).
+
+> Tip: for games that ship with a partial translation patch, the extraction contains
+> both translated and untranslated strings — delete the already-translated entries
+> from `<game>_extracted.json` to translate only the remainder. For Unity Localization
+> games the translation is written into the source-language table (select that
+> language in-game to see it).
 
 ## CLI (equivalent to the GUI)
 

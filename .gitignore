@@ -31,3 +31,7 @@ srpg_work/
 # 游戏提取产物（含游戏文本，绝不上传）
 *_extracted*.json
 *.extracted.json
+unity_manifest.json
+
+# Unity 沙箱
+_unity_sandbox/

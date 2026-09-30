@@ -127,6 +127,7 @@ Bob               不写 = 号则保持英文原样
 | RPG Maker **MZ** | `data/` | ✅ 完整支持 |
 | RPG Maker **MV** | `www/data/`（部分发行版在 `data/`） | ✅ 完整支持 |
 | **SRPG Studio** | `data.dts`（配 `runtime.rts`/`environment.evs`） | ✅ 完整支持（桥接 [SRPG-ToolBox](https://github.com/Sinflower/SRPG-ToolBox)，首次运行自动下载其命令行工具，MIT 开源） |
+| **Unity**（TextAsset 剧本 / MonoBehaviour 内嵌文本 / Addressables・Localization 字符串表 Bundle） | `*_Data` + `StreamingAssets/**/*.bundle` | ✅ 支持（依赖 UnityPy，`pip install UnityPy`；不支持编译进 DLL 的字符串） |
 | RPG Maker VX Ace / VX / XP | `.rvdata2` 二进制文件 | ❌ 不支持（二进制序列化格式） |
 | Wolf RPG Editor | `.wolf` 封包 | ❌ 不支持 |
 
@@ -162,6 +163,28 @@ python srpg_apply.py <游戏目录> <游戏名>_extracted_translated.json
 安全机制：原 `data.dts` 自动备份为 `.automt.bak`；消息按原始行边界切回，行数不齐
 一律跳过保原文；检测到 `localization.dat`（官方本地化）自动停用，否则会覆盖自定义
 翻译。已实弹验证（943MB 游戏：6985 条文本提取→26 条标记翻译→回包→再解析确认）。
+
+### Unity 游戏
+
+```
+pip install UnityPy
+python unity_extract.py <游戏目录>      # 扫描 assets/level/bundle → 收集文本+位置清单
+python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && python mt_apply.py <游戏名>_extracted.json
+python unity_apply.py <游戏目录> <游戏名>_extracted_translated.json
+```
+
+提取范围：TextAsset（自动识别 JSON 剧本按值提取）、MonoBehaviour 内嵌字符串
+（IL2CPP 无 typetree 也可，按长度前缀扫描）、StreamingAssets 下的 .bundle
+（含 Addressables / Unity Localization 字符串表）。自动排除 TMP 排版字符表
+（LineBreaking 等）防破坏换行。
+
+安全机制：写回采用**临时文件+原子替换**（绝不在产出完成前截断原文件）；每个改动
+文件自动备份 `.automt.bak`；字符串按字节前缀原位重建，校验不符自动跳过。
+已实弹验证（IL2CPP+Addressables 游戏：283 条提取→68 处回写→重提取标记全数找回）。
+
+> 提示：自带部分翻译的游戏（如已装汉化补丁），提取结果会同时含有已翻与未翻条目；
+> 只想补漏的话，可在 `<游戏名>_extracted.json` 里删掉已翻条目再走管线。Unity
+> Localization 游戏的译文写在原语言表内（游戏选该语言显示译文）。
 
 ## 命令行三步流程（与 GUI 等价）
 
