@@ -90,7 +90,7 @@ AI 但好过留英文，结束汇总里报告兜底条数。`.env` 里 `MT_FALLB
 校验失败的条目自动进入分段扫尾重翻（记号绝不可能丢）。exe 版拖拽开箱即用；
 源码运行需 `pip install tkinterdnd2`（未装时自动退化为点选文件）。
 
-> 重新打包：`pip install pyinstaller && python -m PyInstaller --onefile --windowed --name AutoMT --collect-all tkinterdnd2 mt_gui.py`
+> 重新打包：`pip install pyinstaller && python -m PyInstaller --onefile --windowed --name AutoMT --collect-all tkinterdnd2 --collect-all sv_ttk mt_gui.py`
 
 输出：输入文件同目录 `xxx_translated.json`（键=英文原文精确匹配，MTool 可直接用）。
 

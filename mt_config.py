@@ -20,7 +20,8 @@ DEFAULT_ENDPOINT = ("https://clients5.google.com/translate_a/t"
                     "?client=dict-chrome-ex&sl={sl}&tl={tl}&q={q}")
 
 ENV_KEYS = ("MT_ENDPOINT", "MT_API_KEY", "MT_API_HEADER", "MT_SL", "MT_TL",
-            "MT_AUTO_NAMES", "MT_LANG", "MT_API_TYPE", "MT_MODEL", "MT_FALLBACK")
+            "MT_AUTO_NAMES", "MT_LANG", "MT_API_TYPE", "MT_MODEL", "MT_FALLBACK",
+            "MT_THEME")
 
 class ApiError(Exception):
     """kind: 'fatal' 立即终止（401/402/404 等，重试无意义）

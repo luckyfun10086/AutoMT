@@ -45,7 +45,7 @@ and switches back to the Game tab. Cancel anytime — progress is resumable.
 > Drag & drop inside the packaged exe works out of the box. Running from source needs
 > `pip install tkinterdnd2` (falls back to a file picker without it).
 >
-> Rebuild the exe: `pip install pyinstaller && python -m PyInstaller --onefile --windowed --name AutoMT --collect-all tkinterdnd2 mt_gui.py`
+> Rebuild the exe: `pip install pyinstaller && python -m PyInstaller --onefile --windowed --name AutoMT --collect-all tkinterdnd2 --collect-all sv_ttk mt_gui.py`
 
 Output: `yourfile_translated.json` next to the input — keys are exact original strings,
 so MTool picks them up directly.

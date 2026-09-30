@@ -24,6 +24,12 @@ try:
 except ImportError:
     HAS_DND = False
 
+try:
+    import sv_ttk                # Sun Valley 主题（Windows 11 风格，亮/暗）
+    HAS_SVTTK = True
+except ImportError:
+    HAS_SVTTK = False
+
 # ---------------- 界面文案（中/英） ----------------
 S = {
     "zh": {
@@ -492,11 +498,26 @@ class Pipe:
         return self.apply(masked, tokens)
 
 # ---------------- GUI ----------------
-ACCENT = "#2563eb"      # 主色
-ACCENT_HOVER = "#1d4ed8"
-BG = "#f5f6f8"
-DROP_BG = "#eef2ff"
-DROP_BORDER = "#c7d2fe"
+ACCENT = "#2563eb"          # 亮色主色
+ACCENT_DARK = "#4f8cff"     # 暗色主色
+LIGHT = {
+    "accent": ACCENT, "accent_hover": "#1d4ed8",
+    "bg": "#f5f6f8", "fg": "#1f2937", "hint": "#8a93a3",
+    "labelframe_fg": "#374151",
+    "drop_bg": "#eef2ff", "drop_fg": "#4b5563", "drop_border": "#c7d2fe",
+    "log_bg": "#ffffff", "log_fg": "#111827",
+    "btn_bg": "#e5e7eb", "btn_fg": "#374151", "btn_active": "#d1d5db",
+    "ok": "#15803d", "muted": "#6b7280",
+}
+DARK = {
+    "accent": ACCENT_DARK, "accent_hover": "#6ea0ff",
+    "bg": "#1c1d22", "fg": "#e6e7ec", "hint": "#9aa1ad",
+    "labelframe_fg": "#c3c8d4",
+    "drop_bg": "#20263a", "drop_fg": "#b9c2d6", "drop_border": "#3b4a78",
+    "log_bg": "#14161a", "log_fg": "#d4d7de",
+    "btn_bg": "#2a2d35", "btn_fg": "#cdd2dc", "btn_active": "#33363f",
+    "ok": "#34d399", "muted": "#8b93a3",
+}
 
 # 接口类型（语言中立标签）
 API_TYPES = [("MT · GET", "get"), ("AI · OpenAI", "openai")]
@@ -513,35 +534,81 @@ class App:
         self.lang = env.get("MT_LANG", "zh")
         if self.lang not in S:
             self.lang = "zh"
-        self._style()
+        self.theme = env.get("MT_THEME", "dark" if HAS_SVTTK else "light")
+        if self.theme not in ("dark", "light"):
+            self.theme = "light"
+        self.pal = DARK if self.theme == "dark" else LIGHT
+        self._apply_theme()
         self._build()
+        self._apply_widget_colors()
         self.root.after(100, self._poll)
 
     def T(self, key):
         return S[self.lang][key]
 
-    def _style(self):
+    def _apply_theme(self):
+        """主题层：sv-ttk（有则用）+ 自定义配色与样式覆盖"""
+        if HAS_SVTTK:
+            try:
+                sv_ttk.set_theme(self.theme)
+            except Exception:
+                pass
         st = ttk.Style()
-        try:
-            st.theme_use("clam")
-        except tk.TclError:
-            pass
-        base_font = ("Microsoft YaHei UI", 10) if self.lang == "zh" else ("Segoe UI", 10)
-        self.root.option_add("*Font", base_font)
-        st.configure("TFrame", background=BG)
-        st.configure("TLabelframe", background=BG, borderwidth=1, relief="solid")
-        st.configure("TLabelframe.Label", background=BG, foreground="#374151",
-                     font=(base_font[0], 10, "bold"))
-        st.configure("TLabel", background=BG, foreground="#1f2937")
-        st.configure("Hint.TLabel", foreground="#8a93a3", font=(base_font[0], 8))
+        if not HAS_SVTTK:
+            try:
+                st.theme_use("clam")
+            except tk.TclError:
+                pass
+        pal = self.pal
+        self.lang_font = ("Microsoft YaHei UI", 10) if self.lang == "zh" else ("Segoe UI", 10)
+        self.root.option_add("*Font", self.lang_font)
+        self.root.configure(bg=pal["bg"])
+        st.configure("TFrame", background=pal["bg"])
+        st.configure("TLabelframe", background=pal["bg"], borderwidth=1, relief="solid")
+        st.configure("TLabelframe.Label", background=pal["bg"],
+                     foreground=pal["labelframe_fg"], font=(self.lang_font[0], 10, "bold"))
+        st.configure("TLabel", background=pal["bg"], foreground=pal["fg"])
+        st.configure("Hint.TLabel", foreground=pal["hint"], font=(self.lang_font[0], 8))
         st.configure("TButton", padding=(10, 5))
-        st.configure("Accent.TButton", foreground="#ffffff", background=ACCENT,
-                     padding=(16, 6), font=(base_font[0], 10, "bold"))
+        st.configure("Accent.TButton", foreground="#ffffff", background=pal["accent"],
+                     padding=(16, 6), font=(self.lang_font[0], 10, "bold"))
         st.map("Accent.TButton",
-               background=[("active", ACCENT_HOVER), ("disabled", "#9db4f5")])
-        st.configure("TProgressbar", thickness=14, background=ACCENT,
-                     troughcolor="#e5e7eb")
+               background=[("active", pal["accent_hover"]), ("disabled", "#9db4f5")])
+        if not HAS_SVTTK:
+            # 无 sv-ttk 时自己补进度条/表格的配色；有 sv-ttk 时交给主题
+            st.configure("TProgressbar", thickness=14, background=pal["accent"],
+                         troughcolor=pal["drop_bg"])
+            st.configure("Treeview", background=pal["log_bg"], foreground=pal["log_fg"],
+                         fieldbackground=pal["log_bg"], rowheight=26)
+            st.configure("Treeview.Heading", font=(self.lang_font[0], 9, "bold"))
         st.configure("TCombobox", padding=(4, 3))
+        st.configure("TNotebook.Tab", padding=(14, 6))
+
+    def _apply_widget_colors(self):
+        """tk 原生控件（非 ttk）按主题着色；在 _build 之后调用"""
+        pal = self.pal
+        for attr in ("drop", "lang_btn", "theme_btn", "logbox", "lbl_stage"):
+            w = getattr(self, attr, None)
+            if w is None:
+                continue
+            if attr == "drop":
+                w.config(bg=pal["drop_bg"], fg=pal["drop_fg"],
+                         highlightbackground=pal["drop_border"])
+            elif attr in ("lang_btn", "theme_btn"):
+                w.config(bg=pal["btn_bg"], fg=pal["btn_fg"],
+                         activebackground=pal["btn_active"])
+            elif attr == "logbox":
+                w.config(bg=pal["log_bg"], fg=pal["log_fg"])
+            elif attr == "lbl_stage":
+                w.config(foreground=pal["accent"])
+
+    def toggle_theme(self):
+        self.theme = "light" if self.theme == "dark" else "dark"
+        self.pal = DARK if self.theme == "dark" else LIGHT
+        mt_config.save_env({"MT_THEME": self.theme})
+        self._apply_theme()
+        self._apply_widget_colors()
+        self.theme_btn.config(text="☀" if self.theme == "dark" else "🌙")
 
     def _build(self):
         self.root.title(self.T("title"))
@@ -553,19 +620,26 @@ class App:
 
         self.root.geometry("900x720")
         self.root.minsize(820, 660)
-        self.root.configure(bg=BG)
+        self.root.configure(bg=self.pal["bg"])
 
-        # ---- 顶栏：标题 + 语言切换 ----
+        # ---- 顶栏：标题 + 主题切换 + 语言切换 ----
         head = ttk.Frame(self.root, padding=(14, 10, 14, 0))
         head.pack(fill="x")
         ttk.Label(head, text=self.T("title"),
                   font=("Microsoft YaHei UI", 13, "bold"),
-                  foreground="#111827").pack(side="left")
+                  foreground=self.pal["fg"]).pack(side="left")
         self.lang_btn = tk.Button(head, text=self.T("lang_btn"), command=self.toggle_lang,
-                                  relief="flat", bg="#e5e7eb", fg="#374151",
-                                  activebackground="#d1d5db", padx=12, pady=2,
+                                  relief="flat", bg=self.pal["btn_bg"], fg=self.pal["btn_fg"],
+                                  activebackground=self.pal["btn_active"], padx=12, pady=2,
                                   cursor="hand2", font=("Segoe UI", 9, "bold"))
         self.lang_btn.pack(side="right")
+        self.theme_btn = tk.Button(head,
+                                   text="☀" if self.theme == "dark" else "🌙",
+                                   command=self.toggle_theme,
+                                   relief="flat", bg=self.pal["btn_bg"], fg=self.pal["btn_fg"],
+                                   activebackground=self.pal["btn_active"], padx=10, pady=2,
+                                   cursor="hand2", font=("Segoe UI", 11))
+        self.theme_btn.pack(side="right", padx=(0, 8))
 
         # ---- 全局：源/目标语言 + 人名选项 ----
         row1 = ttk.Frame(self.root, padding=(14, 8))
@@ -597,20 +671,21 @@ class App:
         self.nb.add(t1, text=self.T("tab_quick"))
         drop_text = self.T("drop") + (self.T("drop_nodnd") if not HAS_DND else "")
         self.drop = tk.Label(t1, text=drop_text, relief="flat",
-                             bg=DROP_BG, fg="#4b5563", padx=16, pady=26,
+                             bg=self.pal["drop_bg"], fg=self.pal["drop_fg"], padx=16, pady=26,
                              font=("Microsoft YaHei UI", 12), cursor="hand2",
-                             highlightthickness=2, highlightbackground=DROP_BORDER)
+                             highlightthickness=2, highlightbackground=self.pal["drop_border"])
         self.drop.pack(fill="x", pady=4)
         self.drop.bind("<Button-1>", lambda e: self.pick())
-        self.drop.bind("<Enter>", lambda e: self.drop.config(highlightbackground=ACCENT))
-        self.drop.bind("<Leave>", lambda e: self.drop.config(highlightbackground=DROP_BORDER))
+        self.drop.bind("<Enter>", lambda e: self.drop.config(
+            highlightbackground=self.pal["accent"]))
+        self.drop.bind("<Leave>", lambda e: self.drop.config(
+            highlightbackground=self.pal["drop_border"]))
 
         prog = ttk.Frame(t1, padding=(4, 2))
         prog.pack(fill="x")
         self.stage_var = tk.StringVar(value=self.T("waiting"))
         self.lbl_stage = ttk.Label(prog, textvariable=self.stage_var,
-                                   font=("Microsoft YaHei UI", 10, "bold"),
-                                   foreground=ACCENT)
+                                   font=("Microsoft YaHei UI", 10, "bold"))
         self.lbl_stage.pack(anchor="w")
         self.bar = ttk.Progressbar(prog, maximum=100, style="TProgressbar")
         self.bar.pack(fill="x", pady=5)
@@ -630,8 +705,9 @@ class App:
         self.open_btn.pack(side="left")
 
         self.logbox = ScrolledText(t1, height=8, font=("Consolas", 9),
-                                   state="disabled", bg="#ffffff", relief="flat",
-                                   highlightthickness=1, highlightbackground="#e5e7eb")
+                                   state="disabled", bg=self.pal["log_bg"],
+                                   fg=self.pal["log_fg"], relief="flat",
+                                   highlightthickness=1, highlightbackground=self.pal["drop_border"])
         self.logbox.pack(fill="both", expand=True, pady=(6, 2))
 
         # ===== Tab2 游戏汉化 =====
@@ -639,16 +715,16 @@ class App:
         self.nb.add(t2, text=self.T("tab_game"))
         ttk.Label(t2, text=self.T("g_title"),
                   font=("Microsoft YaHei UI", 11, "bold"),
-                  foreground="#111827").pack(anchor="w")
-        ttk.Label(t2, text=self.T("g_drop") + "\n" + self.T("g_steps"),
-                  style="Hint.TLabel").pack(anchor="w", pady=(2, 8))
+                  foreground=self.pal["fg"]).pack(anchor="w")
+        self.g_hint_lbl = ttk.Label(t2, text=self.T("g_drop") + "\n" + self.T("g_steps"),
+                                    style="Hint.TLabel", wraplength=760, justify="left")
+        self.g_hint_lbl.pack(anchor="w", pady=(2, 8))
 
         info = ttk.Frame(t2)
         info.pack(fill="x", pady=4)
         self.g_engine_var = tk.StringVar(value=self.T("g_engine").format(self.T("g_unknown")))
         self.lbl_g_engine = ttk.Label(info, textvariable=self.g_engine_var,
-                                      font=("Microsoft YaHei UI", 11, "bold"),
-                                      foreground=ACCENT)
+                                      font=("Microsoft YaHei UI", 11, "bold"))
         self.lbl_g_engine.pack(side="left")
         self.g_path_var = tk.StringVar(value="")
         ttk.Label(info, textvariable=self.g_path_var, style="Hint.TLabel").pack(
@@ -666,7 +742,9 @@ class App:
         self.apply_btn = ttk.Button(gbtns, text=self.T("g_apply"),
                                     command=self.apply_to_game, state="disabled")
         self.apply_btn.pack(side="left", padx=8)
-        ttk.Label(t2, text=self.T("g_backup_note"), style="Hint.TLabel").pack(anchor="w", pady=(2, 6))
+        self.g_note_lbl = ttk.Label(t2, text=self.T("g_backup_note"), style="Hint.TLabel",
+                                    wraplength=760, justify="left")
+        self.g_note_lbl.pack(anchor="w", pady=(2, 6))
 
         # 引擎支持总览表
         ttk.Label(t2, text=self.T("g_engine_table"),
@@ -718,9 +796,14 @@ class App:
                                                                  sticky="w", padx=4)
         self.save_btn = ttk.Button(cfg, text=self.T("save_env"), command=self.save_env)
         self.save_btn.grid(row=1, column=5, rowspan=2, padx=(8, 0), sticky="ns")
-        self.lbl_api_hint = ttk.Label(cfg, text=self.T("api_hint"), style="Hint.TLabel")
-        self.lbl_api_hint.grid(row=3, column=0, columnspan=6, sticky="w", pady=(4, 0))
+        self.lbl_api_hint = ttk.Label(cfg, text=self.T("api_hint"), style="Hint.TLabel",
+                                      wraplength=700, justify="left")
+        self.lbl_api_hint.grid(row=3, column=0, columnspan=6, sticky="we",
+                               pady=(4, 0))
         cfg.columnconfigure(1, weight=1)
+        # 提示文字随窗口宽度自动换行，永不溢出
+        cfg.bind("<Configure>", lambda e: self.lbl_api_hint.configure(
+            wraplength=max(320, e.width - 60)))
 
         env = mt_config.load_env()
         if env.get("MT_ENDPOINT"):
@@ -747,6 +830,8 @@ class App:
     def toggle_lang(self):
         self.lang = "en" if self.lang == "zh" else "zh"
         mt_config.save_env({"MT_LANG": self.lang})
+        self._apply_theme()
+        self._apply_widget_colors()
         self.root.title(self.T("title"))
         self.lang_btn.config(text=self.T("lang_btn"))
         self.lbl_src.config(text=self.T("src"))
@@ -767,8 +852,9 @@ class App:
         self.lbl_header.grid(row=2, column=3, sticky="e")
         self.save_btn = ttk.Button(cfg, text=self.T("save_env"), command=self.save_env)
         self.save_btn.grid(row=1, column=5, rowspan=2, padx=(8, 0), sticky="ns")
-        self.lbl_api_hint = ttk.Label(cfg, text=self.T("api_hint"), style="Hint.TLabel")
-        self.lbl_api_hint.grid(row=3, column=0, columnspan=6, sticky="w", pady=(4, 0))
+        self.lbl_api_hint = ttk.Label(cfg, text=self.T("api_hint"), style="Hint.TLabel",
+                                      wraplength=700, justify="left")
+        self.lbl_api_hint.grid(row=3, column=0, columnspan=6, sticky="we", pady=(4, 0))
         cfg.config(text=self.T("api_frame"))
         self.drop.config(text=self.T("drop") + (self.T("drop_nodnd") if not HAS_DND else ""))
         self.start_btn.config(text=self.T("start"))
@@ -974,7 +1060,7 @@ class App:
         self.detail_var.set(p)
         self.start_btn.config(state="normal")
         self.open_btn.config(state="disabled")
-        self.drop.config(fg="#15803d")
+        self.drop.config(fg=self.pal["ok"])
         self.log(f"[file] {p}")
 
     def start(self):
@@ -1001,7 +1087,7 @@ class App:
         self.cancel.clear()
         self.start_btn.config(state="disabled")
         self.cancel_btn.config(state="normal")
-        self.drop.config(fg="#6b7280")
+        self.drop.config(fg=self.pal["muted"])
         self.log(self.T("log_start").format(self.sl_var.get(), self.tl_var.get()))
         self.worker = threading.Thread(target=self._work, args=(pipe,), daemon=True)
         self.worker.start()
@@ -1166,7 +1252,7 @@ class App:
                     self.g_translate_btn.config(state="normal")
                     self.cancel_btn.config(state="disabled")
                     self.open_btn.config(state="normal")
-                    self.drop.config(fg="#15803d")
+                    self.drop.config(fg=self.pal["ok"])
                     # 翻译完成 → 如果之前识别过游戏引擎，询问是否立即导入
                     if self.game_path and self.apply_script:
                         self.apply_btn.config(state="normal")
@@ -1187,7 +1273,7 @@ class App:
                                             self.T("msg_done_b").format(ok, drop, dst))
                 elif kind == "applied":
                     self.log(f"[applied] ✓ 翻译已导入游戏: {payload}")
-                    self.drop.config(fg="#0f7")
+                    self.drop.config(fg=self.pal["ok"])
                     self.g_extract_btn.config(state="normal")
                     messagebox.showinfo(
                         "Applied / 已导入",
