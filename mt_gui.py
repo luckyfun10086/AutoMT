@@ -54,11 +54,12 @@ class Cancel(Exception):
 class Pipe:
     """三段式管线，供 GUI 线程调用；cb(stage, done, total, note)"""
     def __init__(self, src_json, workdir, sl, tl, cancel, cb, log,
-                 endpoint=None, api_key=None, api_header=None):
+                 endpoint=None, api_key=None, api_header=None, auto_names=True):
         self.src, self.work, self.sl, self.tl = src_json, workdir, sl, tl
         self.cancel, self.cb, self.log = cancel, cb, log
         self.endpoint = (endpoint or "").strip() or mt_config.DEFAULT_ENDPOINT
         self.headers = mt_config.build_headers(api_key, api_header)
+        self.auto_names = auto_names
 
     def load_names(self):
         names = []
@@ -109,17 +110,28 @@ class Pipe:
         os.makedirs(self.work, exist_ok=True)
         orig = json.load(open(self.src, encoding="utf-8"))
         names = self.load_names()
+        # 自动人名识别：用户词条优先，未覆盖的高频专名自动掩码（保持原文一致）
+        todo = [k for k, v in orig.items()
+                if isinstance(k, str) and k.strip() and not (isinstance(v, str) and v.strip())]
+        user_set = {n.partition("=")[0].strip().lower() for n in names}
+        if self.auto_names:
+            auto = [(w, c) for w, c in mt_config.detect_names(todo, self.sl)
+                    if w.lower() not in user_set]
+            if not auto and self.sl.split("-")[0].lower() in ("zh", "ko"):
+                self.log("源语言为中文/韩文：无法自动识别人名，建议在 names.txt 中列出以保持一致")
+            names.extend(w for w, _ in auto)
+            if auto:
+                self.log(f"自动识别专有名词 {len(auto)} 个（已自动保持原文一致）: "
+                         + ", ".join(f"{w}×{c}" for w, c in auto[:30]))
+        elif user_set:
+            self.log("自动人名识别已关闭：仅使用 names.txt 中的人工词条")
         tokens, name_zh, masked = {}, {}, {}
-        for i, (k, v) in enumerate(orig.items()):
+        for i, k in enumerate(todo):
             if self.cancel.is_set():
                 raise Cancel()
-            if not isinstance(k, str) or not k.strip():
-                continue
-            if isinstance(v, str) and v.strip():
-                continue
             masked[self.mask(k, tokens, names, name_zh)] = ""
             if i % 500 == 0:
-                self.cb("clean", i, len(orig), "清洗掩码")
+                self.cb("clean", i, len(todo), "清洗掩码")
         mp, tp = os.path.join(self.work, "masked.json"), os.path.join(self.work, "tokens.json")
         if os.path.exists(mp):   # 断点：保留旧译文
             prev = json.load(open(mp, encoding="utf-8"))
@@ -324,6 +336,8 @@ class App:
         self.tl_var = tk.StringVar(value="中文(简)")
         ttk.Combobox(top, textvariable=self.tl_var, values=[n for n, _ in LANGS],
                      width=10, state="readonly").pack(side="left", padx=4)
+        self.autonames_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(top, text="自动识别人名并保持一致", variable=self.autonames_var).pack(side="left", padx=6)
         ttk.Label(top, text="（人名表：输入 json 同目录或本工具目录 names.txt）").pack(side="left", padx=10)
 
         cfg = ttk.LabelFrame(self.root, text="翻译接口（个人配置，保存到本机 .env，不会进 git）", padding=6)
@@ -349,6 +363,8 @@ class App:
             self.key_var.set(env["MT_API_KEY"])
         if env.get("MT_API_HEADER"):
             self.hdr_var.set(env["MT_API_HEADER"])
+        if env.get("MT_AUTO_NAMES"):
+            self.autonames_var.set(env["MT_AUTO_NAMES"] == "1")
 
         self.drop = tk.Label(self.root, text="\n\n把 ManualTransFile.json 拖到这里\n（或点击选择文件）\n\n",
                              relief="ridge", bd=2, pady=18, font=("Microsoft YaHei", 12),
@@ -417,6 +433,7 @@ class App:
                 "MT_ENDPOINT": self.url_var.get().strip(),
                 "MT_API_KEY": self.key_var.get().strip(),
                 "MT_API_HEADER": self.hdr_var.get().strip(),
+                "MT_AUTO_NAMES": "1" if self.autonames_var.get() else "0",
             })
             self.log(f"配置已保存到 {mt_config.env_path()}（.env 已在 .gitignore 中，不会上传）")
             messagebox.showinfo("已保存", f"配置已写入：\n{mt_config.env_path()}")
@@ -435,11 +452,12 @@ class App:
             messagebox.showerror("接口 URL 有误", str(e))
             return
         h = hashlib.md5(self.src_file.encode()).hexdigest()[:8]
-        work = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mt_work", h)
+        work = os.path.join(mt_config.base_dir(), "mt_work", h)
         pipe = Pipe(self.src_file, work, sl, tl, self.cancel, self._cb, self.log,
                     endpoint=self.url_var.get().strip(),
                     api_key=self.key_var.get().strip(),
-                    api_header=self.hdr_var.get().strip())
+                    api_header=self.hdr_var.get().strip(),
+                    auto_names=self.autonames_var.get())
         self.cancel.clear()
         self.start_btn.config(state="disabled")
         self.cancel_btn.config(state="normal")

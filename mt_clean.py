@@ -20,6 +20,7 @@ AutoMT 第一步：文本清洗（掩码）
     同目录 names.txt，一行一个英文名，可选
 """
 import json, re, sys, io, os, hashlib
+import mt_config
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
@@ -86,14 +87,27 @@ def main():
     data = json.load(open(src, encoding="utf-8"))
     os.makedirs("mt_work", exist_ok=True)
     names = load_names()
+    # 自动人名识别：用户词条优先，未覆盖的高频专名自动掩码（保持原文一致）
+    todo = [k for k, v in data.items()
+            if isinstance(k, str) and k.strip() and not (isinstance(v, str) and v.strip())]
+    user_set = {n.partition("=")[0].strip().lower() for n in names}
+    env = mt_config.load_env()
+    lang = env.get("MT_SL", "en")
+    if "--no-auto-names" in sys.argv or env.get("MT_AUTO_NAMES") == "0":
+        auto = []
+        print("自动人名识别已关闭（--no-auto-names / MT_AUTO_NAMES=0）：仅使用 names.txt 人工词条")
+    else:
+        auto = [(w, c) for w, c in mt_config.detect_names(todo, lang)
+                if w.lower() not in user_set]
+    for w, c in auto:
+        names.append(w)
+    if auto:
+        print(f"自动识别专有名词 {len(auto)} 个（自动保持原文一致，如需译名可加进 names.txt）:")
+        print("  " + ", ".join(f"{w}x{c}" for w, c in auto[:30]) + ("…" if len(auto) > 30 else ""))
     tokens = {}
     name_zh = {}
     masked = {}
-    for k, v in data.items():
-        if not isinstance(k, str) or not k.strip():
-            continue
-        if isinstance(v, str) and v.strip():
-            continue  # 已翻译，跳过（增量）
+    for k in todo:
         masked[mask(k, tokens, names, name_zh)] = ""
     # 增量：保留上次已翻的记号条目
     prev_path = "mt_work/masked.json"
