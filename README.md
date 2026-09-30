@@ -25,16 +25,22 @@ page — a standalone Windows binary, no Python required. Everything (`.env`, `n
 > and may change or rate-limit at any time; if it ever does, the tool keeps working with
 > any custom endpoint. Translate only content you have the right to use.
 
-## GUI (recommended)
+## GUI (recommended) — three functional zones
 
-1. Pick **source → target language** at the top (English → Simplified Chinese by default)
-2. **Drag & drop** your MTool-exported JSON into the window (or click to browse)
-3. Click **Start** — live progress bar: ① Clean & mask → ② Translate (speed + ETA) →
+The window is organized into tabs:
+
+1. **⚡ Quick Translate** — drag & drop an MTool-exported JSON (or anything
+   `_extracted.json`), pick **source → target language**, click **Start**:
+   live progress bar ① Clean & mask → ② Translate (speed + ETA) →
    ③ Validate & apply
-4. A dialog shows the output path when done; one click opens the folder
+2. **🎮 Game Localization** — drop a **game folder / EXE** anywhere in the
+   window: the engine is auto-detected (badge shown), then a guided flow:
+   ② Extract text → ③ Translate → ④ Apply to game. A live table lists every
+   supported engine (and detected-but-unsupported ones with guidance)
+3. **⚙ Settings** — translation API configuration (saved to local `.env`)
 
-Any string that fails validation is automatically retranslated in segment-wise fallback
-mode (tokens can never be lost). Cancel anytime — progress is resumable.
+After translation finishes, AutoMT prompts to apply the result to the game
+and switches back to the Game tab. Cancel anytime — progress is resumable.
 
 > Drag & drop inside the packaged exe works out of the box. Running from source needs
 > `pip install tkinterdnd2` (falls back to a file picker without it).
@@ -142,14 +148,20 @@ work in every mode.
 |--------|---------------|--------|
 | RPG Maker **MZ** | `data/` | ✅ fully supported |
 | RPG Maker **MV** | `www/data/` (or `data/` in some distributions) | ✅ fully supported |
+| **RPG Maker VX Ace / VX / XP** | `Data/*.rvdata2` (VX: `.rvdata`, XP: `.rxdata`) | ✅ fully supported — pure-Python Ruby Marshal 4.8 codec, byte-exact round-trip |
 | **SRPG Studio** | `data.dts` (with `runtime.rts`/`environment.evs`) | ✅ fully supported — bridges [SRPG-ToolBox](https://github.com/Sinflower/SRPG-ToolBox) (MIT), auto-downloaded on first run |
+| **Kirikiri / KAG** (.xp3) | `data.xp3` + `patch*.xp3` | ✅ fully supported — all archives parsed in mount order; write-back is a **non-destructive overlay patch** |
+| **Ren'Py** (6.99+/7/8) | `game/*.rpa`, `game/*.rpyc` | ✅ fully supported — generates official `game/tl/<lang>/` packages (non-destructive) |
+| **TyranoScript** | `data/scenario/*.ks` | ✅ fully supported |
 | **Unity** (TextAsset scenarios / MonoBehaviour strings / Addressables & Localization bundles) | `*_Data` + `StreamingAssets/**/*.bundle` | ✅ supported (needs `pip install UnityPy`; strings compiled into DLLs are out of scope) |
-| RPG Maker VX Ace / VX / XP | `.rvdata2` binary files | ❌ not supported (binary Marshal format) |
-| Wolf RPG Editor | `.wolf` archives | ❌ not supported |
+
+Detected but not (yet) supported: SiglusEngine (Key), AliceSoft (.ain), ExHIBIT,
+Wolf RPG, NScripter — dropping such a folder tells you which engine it is and
+what to use instead.
 
 MV/MZ store all game text as plain JSON (`Map*.json`, `CommonEvents.json`,
 `Troops.json`, …) — AutoMT reads and patches them directly, no third-party tool
-required. For VX Ace and older engines, use MTool instead.
+required.
 
 ```
 python rpg_extract.py <game-folder>     # → game.extracted.json
@@ -166,6 +178,83 @@ better quality), scrolling text (405), choices (102), actor name/nickname change
 Safety: `rpg_apply.py` backs up originals to `data_backup/` first, only replaces
 exact-match blocks, and skips any block whose translated line count doesn't match —
 the game can never be corrupted by a bad translation.
+
+### RPG Maker VX Ace / VX / XP games
+
+`.rvdata2` files are Ruby Marshal 4.8 dumps. AutoMT ships a pure-Python,
+zero-dependency Marshal codec (`rvdata.py`) that round-trips **byte-exact** —
+verified against hand-crafted ground-truth byte vectors, 300 random-tree fuzz
+cases, and bidirectional cross-validation against the `rubymarshal` library.
+
+```
+python rva_extract.py <game-folder>     # dialogue/choices/rename/map names/skill & item text
+python mt_clean.py <game>_extracted.json && python mt_translate.py && python mt_apply.py <game>_extracted.json
+python rva_apply.py <game-folder> <game>_extracted_translated.json
+```
+
+Safety: only exact-match blocks are replaced (line-count mismatch keeps the
+original), `Scripts`/`System` are never touched, every modified file is backed
+up to `Data_backup/`, and each written file is re-parsed before the atomic
+replace. Translations mutate strings in place, so Marshal link/symbol tables
+can never shift.
+
+### Kirikiri (吉里吉里) games — ADV visual novels
+
+All `*.xp3` archives are parsed in mount order (later archives override earlier
+ones — `data.xp3` → `patch001.xp3` → …), covering v1/v2 headers, secondary
+indexes, zlib & raw index chunks, and three different packer layouts (verified
+on real games). KAG `.ks` scripts (CP932 / UTF-16LE / UTF-8) are extracted
+line-by-line: text outside `[tags]`, skipping comments, labels, `@` commands
+and embedded TJS (`iscript`/`macro`) blocks.
+
+```
+python krkr_extract.py <game-folder>    # → <game>_extracted.json (e.g. 44,296 segments from a real game)
+python mt_clean.py <game>_extracted.json && python mt_translate.py && python mt_apply.py <game>_extracted.json
+python krkr_apply.py <game-folder> <game>_extracted_translated.json
+```
+
+Write-back is **non-destructive**: only the modified `.ks` files are packed into
+`patch_zz_automt.xp3` which mounts last and overrides the originals — delete
+that one file to uninstall. If Chinese text doesn't fit a CP932 script's
+encoding, the file is upgraded to UTF-16LE+BOM automatically (`--keep-enc` to
+skip such files instead).
+
+### Ren'Py games
+
+Reads `.rpa` archives (RPA-2.0/3.0) and `.rpyc` bytecode (the RPC2 format used
+by Ren'Py 6.99+/7/8) with a restricted, code-execution-free unpickler.
+Dialogue comes from `TranslateSay`/`Say` nodes **with the engine's own
+translation identifiers**; menu choices and `_()` strings are collected too.
+
+```
+python renpy_extract.py <game-folder>   # → <game>_extracted.json
+python mt_clean.py <game>_extracted.json && python mt_translate.py && python mt_apply.py <game>_extracted.json
+python renpy_apply.py <game-folder> <game>_extracted_translated.json [language]
+```
+
+`renpy_apply.py` generates an **official translation package** in
+`game/tl/<language>/automt_script.rpy` (default language `chinese`) —
+`translate <lang> <identifier>:` blocks for dialogue plus a
+`translate <lang> strings:` block for choices/UI text. Switch the language
+in-game (Preferences → Language) to see it; delete the folder to uninstall.
+No game file is ever modified.
+
+Validated against the SDK's engine-generated French translation of the tutorial
+game: all 788 statement identifiers matched, regenerated blocks are identical
+to the official ones.
+
+### TyranoScript games
+
+```
+python tyrano_extract.py <game-folder>  # data/scenario/*.ks + character names from system json
+python mt_clean.py <game>_extracted.json && python mt_translate.py && python mt_apply.py <game>_extracted.json
+python tyrano_apply.py <game-folder> <game>_extracted_translated.json
+```
+
+Text segments outside `[tags]` are extracted (comments/labels/speaker
+lines/macro & eval blocks skipped, `[link]` choice text included) and written
+back with exact in-line replacement; each original file is backed up as
+`*.automt.bak`.
 
 ### SRPG Studio games
 
@@ -251,13 +340,18 @@ lost). Defaults to `ManualTransFile.json` in the current directory.
 
 ## Files
 
-- `mt_gui.py` — GUI (also the PyInstaller entry point)
+- `mt_gui.py` — GUI with three functional tabs (also the PyInstaller entry point)
 - `mt_clean.py` / `mt_translate.py` / `mt_apply.py` — the three CLI stages
-- `mt_config.py` — config layer (.env I/O, URL building, response parsing, name detection)
-- `rpg_extract.py` / `rpg_apply.py` — standalone RPG Maker MV/MZ extraction & write-back
+- `mt_config.py` — config layer (.env I/O, URL building, response parsing, name detection, engine registry)
+- `rpg_extract.py` / `rpg_apply.py` — RPG Maker MV/MZ extraction & write-back
+- `rvdata.py` + `rva_extract.py` / `rva_apply.py` — Ruby Marshal codec & VX Ace/VX/XP pipeline
+- `krkr_xp3.py` + `krkr_extract.py` / `krkr_apply.py` — XP3 archive codec & Kirikiri pipeline
+- `renpy_rpyc.py` + `renpy_extract.py` / `renpy_apply.py` — rpyc/rpa reader & Ren'Py tl packages
+- `tyrano_extract.py` / `tyrano_apply.py` — TyranoScript pipeline
 - `names.example.txt` — names.txt template
-- `_test_custom.py` / `_test_autonames.py` / `_test_rpg.py` — self-tests (mock API,
-  4-language detection, extract/apply round-trip)
+- `_test_custom.py` / `_test_autonames.py` / `_test_rpg.py` / `_test_rva.py` /
+  `_test_rva_pipeline.py` / `_test_krkr.py` / `_test_renpy.py` / `_test_tyrano.py` —
+  self-tests (mock API, name detection, per-engine extract/apply round-trips)
 
 ## License
 

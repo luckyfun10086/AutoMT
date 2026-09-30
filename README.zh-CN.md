@@ -74,12 +74,18 @@ AI 但好过留英文，结束汇总里报告兜底条数。`.env` 里 `MT_FALLB
 > 想要更好效果，请在下方接口栏配置 DeepL/LLM 端点。免费端点为非官方接口，随时
 > 可能变更或限流；届时换任意自定义接口即可继续使用。请仅翻译你有权使用的内容。
 
-## 上位机（推荐）
+## 上位机（推荐）—— 三大功能分区
 
-1. 顶部选择 **源语言 → 目标语言**（默认 英语 → 简体中文）
-2. **把 MTool 导出的 json 拖进窗口**（或点击选文件）
-3. 点「开始翻译」，实时看到：① 文本清洗 → ② 机翻翻译（进度条+速度+剩余时间）→ ③ 回填校验
-4. 完成弹窗显示译文位置，**「打开输出文件夹」一键直达**；随时可取消，断点续翻
+界面按标签页分区：
+
+1. **⚡ 快速翻译** —— 顶部选 **源语言 → 目标语言**，把 MTool 导出的 json（或任意
+   `*_extracted.json`）拖进窗口，点「开始」：① 清洗掩码 → ② 机翻（进度条+速度+剩余时间）→
+   ③ 回填校验
+2. **🎮 游戏汉化** —— 把 **游戏目录 / EXE** 拖到窗口任意位置：自动识别引擎（显示引擎徽章），
+   引导式流程 ② 提取文本 → ③ 开始翻译 → ④ 导入游戏；底部表格实时列出全部引擎支持状态
+3. **⚙ 设置** —— 翻译接口配置（保存在本机 `.env`）
+
+翻译完成后自动询问是否导入游戏并跳回游戏页。随时可取消，断点续翻。
 
 校验失败的条目自动进入分段扫尾重翻（记号绝不可能丢）。exe 版拖拽开箱即用；
 源码运行需 `pip install tkinterdnd2`（未装时自动退化为点选文件）。
@@ -126,14 +132,18 @@ Bob               不写 = 号则保持英文原样
 |------|----------|----------|
 | RPG Maker **MZ** | `data/` | ✅ 完整支持 |
 | RPG Maker **MV** | `www/data/`（部分发行版在 `data/`） | ✅ 完整支持 |
+| **RPG Maker VX Ace / VX / XP** | `Data/*.rvdata2`（VX `.rvdata` / XP `.rxdata`） | ✅ 完整支持——纯 Python Ruby Marshal 4.8 编解码器，字节级还原 |
 | **SRPG Studio** | `data.dts`（配 `runtime.rts`/`environment.evs`） | ✅ 完整支持（桥接 [SRPG-ToolBox](https://github.com/Sinflower/SRPG-ToolBox)，首次运行自动下载其命令行工具，MIT 开源） |
+| **Kirikiri / KAG**（.xp3） | `data.xp3` + `patch*.xp3` | ✅ 完整支持——按挂载顺序解析全部封包；回写为**非破坏覆盖补丁** |
+| **Ren'Py**（6.99+/7/8） | `game/*.rpa`、`game/*.rpyc` | ✅ 完整支持——生成官方 `game/tl/<语言>/` 翻译包（非破坏） |
+| **TyranoScript** | `data/scenario/*.ks` | ✅ 完整支持 |
 | **Unity**（TextAsset 剧本 / MonoBehaviour 内嵌文本 / Addressables・Localization 字符串表 Bundle） | `*_Data` + `StreamingAssets/**/*.bundle` | ✅ 支持（依赖 UnityPy，`pip install UnityPy`；不支持编译进 DLL 的字符串） |
-| RPG Maker VX Ace / VX / XP | `.rvdata2` 二进制文件 | ❌ 不支持（二进制序列化格式） |
-| Wolf RPG Editor | `.wolf` 封包 | ❌ 不支持 |
+
+可识别但暂不支持：SiglusEngine（Key 社）、AliceSoft（.ain）、ExHIBIT、
+Wolf RPG、NScripter——拖入即提示引擎名称与替代方案。
 
 MV/MZ 的全部游戏文本都是明文 JSON（`Map*.json`、`CommonEvents.json`、
-`Troops.json` 等），AutoMT 直接读写，全程无需第三方工具；VX Ace 及更早引擎请
-改用 MTool。
+`Troops.json` 等），AutoMT 直接读写，全程无需第三方工具。
 
 ```
 python rpg_extract.py <游戏目录>      # → game.extracted.json
@@ -149,6 +159,70 @@ python rpg_apply.py <游戏目录> game.extracted_translated.json   # 回写游�
 
 安全机制：回写前自动备份原文件到 `data_backup/`；只替换完全匹配的文本块；
 译文行数与原文不齐的一律跳过保持原文——**坏翻译绝不会损坏游戏**。
+
+### RPG Maker VX Ace / VX / XP 游戏
+
+`.rvdata2` 是 Ruby Marshal 4.8 二进制序列化。AutoMT 自带纯 Python 零依赖的
+Marshal 编解码器（`rvdata.py`），读写**字节级还原**——经手工构造的规范字节串、
+300 轮随机树模糊测试、与 `rubymarshal` 库的双向交叉验证。
+
+```
+python rva_extract.py <游戏目录>     # 对话/选项/改名/地图名/技能·物品文本
+python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && python mt_apply.py <游戏名>_extracted.json
+python rva_apply.py <游戏目录> <游戏名>_extracted_translated.json
+```
+
+安全机制：只替换完全匹配的文本块（行数不齐保持原文）；`Scripts`/`System` 永不触碰；
+改动文件备份到 `Data_backup/`；写回前重新解析校验 + 临时文件原子替换；译文就地修改
+字符串节点——Marshal 链接表/符号表永不失效。
+
+### Kirikiri（吉里吉里）游戏 —— ADV 视觉小说
+
+全部 `*.xp3` 按挂载顺序解析（后挂载覆盖先挂载——`data.xp3` → `patch001.xp3` → …），
+支持 v1/v2 头、二级索引、zlib 与 raw 索引，以及三种不同打包器布局（真实游戏实测）。
+KAG `.ks` 剧本（CP932 / UTF-16LE / UTF-8）逐行提取：`[标签]` 外文本，跳过注释、
+标签行、`@` 命令与内嵌 TJS（`iscript`/`macro`）块。
+
+```
+python krkr_extract.py <游戏目录>    # → <游戏名>_extracted.json（真实游戏 44,296 段实测）
+python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && python mt_apply.py <游戏名>_extracted.json
+python krkr_apply.py <游戏目录> <游戏名>_extracted_translated.json
+```
+
+回写**非破坏**：只有改动的 `.ks` 打成 `patch_zz_automt.xp3`（最后挂载、覆盖原文件），
+删除该文件即卸载汉化。CP932 脚本装不下中文时自动升级为 UTF-16LE+BOM
+（`--keep-enc` 改为跳过该文件）。
+
+### Ren'Py 游戏
+
+读取 `.rpa` 封包（RPA-2.0/3.0）与 `.rpyc` 字节码（Ren'Py 6.99+/7/8 的 RPC2 格式），
+受限 Unpickler 绝不执行任意代码。对话取自 `TranslateSay`/`Say` 节点（**引擎自带的
+翻译标识符**），菜单选项与 `_()` 界面字符串一并收集。
+
+```
+python renpy_extract.py <游戏目录>   # → <游戏名>_extracted.json
+python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && python mt_apply.py <游戏名>_extracted.json
+python renpy_apply.py <游戏目录> <游戏名>_extracted_translated.json [语言名]
+```
+
+`renpy_apply.py` 生成**官方格式翻译包** `game/tl/<语言>/automt_script.rpy`（默认语言
+`chinese`）——对话用 `translate <语言> <标识符>:` 块 + 选项/界面用
+`translate <语言> strings:` 块。游戏内 偏好设置→语言 切换生效；删除目录即卸载。
+游戏文件零改动。
+
+已用 SDK 自带的教程官方法语翻译做交叉验证：788 个语句标识符全部匹配，
+重新生成的翻译块与官方一致。
+
+### TyranoScript 游戏
+
+```
+python tyrano_extract.py <游戏目录>  # data/scenario/*.ks + 系统 json 角色名
+python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && python mt_apply.py <游戏名>_extracted.json
+python tyrano_apply.py <游戏目录> <游戏名>_extracted_translated.json
+```
+
+提取 `[标签]` 外文本段（跳过注释/标签行/说话人行/macro·eval 块，`[link]` 选项文本
+包含），回写按段精确替换；原文件逐个备份为 `*.automt.bak`。
 
 ### SRPG Studio 游戏专用流程
 
@@ -226,12 +300,18 @@ python mt_apply.py [文件]   ③ 还原回填：校验+清理 → 输出 transl
 
 ## 文件说明
 
-- `mt_gui.py` — 上位机（兼 PyInstaller 打包入口）
+- `mt_gui.py` — 上位机（三大功能分区标签页，兼 PyInstaller 打包入口）
 - `mt_clean.py / mt_translate.py / mt_apply.py` — 命令行三步
-- `mt_config.py` — 配置层（.env 读写/URL构建/响应解析/人名识别）
+- `mt_config.py` — 配置层（.env 读写/URL构建/响应解析/人名识别/引擎注册表）
 - `rpg_extract.py / rpg_apply.py` — RPG Maker MV/MZ 独立提取与回写
+- `rvdata.py` + `rva_extract.py / rva_apply.py` — Ruby Marshal 编解码器 + VX Ace/VX/XP 管线
+- `krkr_xp3.py` + `krkr_extract.py / krkr_apply.py` — XP3 封包编解码 + Kirikiri 管线
+- `renpy_rpyc.py` + `renpy_extract.py / renpy_apply.py` — rpyc/rpa 读取器 + Ren'Py tl 翻译包
+- `tyrano_extract.py / tyrano_apply.py` — TyranoScript 管线
 - `names.example.txt` — 人名表模板
-- `_test_custom.py / _test_autonames.py / _test_rpg.py` — 自测（模拟API、四语言识别、提取回写全链路）
+- `_test_custom.py / _test_autonames.py / _test_rpg.py / _test_rva.py /
+  _test_rva_pipeline.py / _test_krkr.py / _test_renpy.py / _test_tyrano.py` —
+  自测（模拟API、四语言识别、各引擎提取回写全链路）
 
 ## 许可证
 
