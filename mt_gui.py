@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-AutoMT 上位机（GUI）
-====================
-设置源语言/目标语言 → 拖拽 MTool 导出的 ManualTransFile.json 进窗口 → 自动
-清洗-机翻-回填 → 实时显示进度 → 完成后展示译文文件位置。
-
-拖拽支持需要 tkinterdnd2（可选）：pip install tkinterdnd2
-未安装时可用「点击选择文件」按钮，功能完全一致。
+AutoMT 上位机（GUI，中英双语）
+===============================
+- 顶部 中/EN 切换按钮，所有界面文字即时切换，选择持久化到 .env (MT_LANG)
+- 设置源/目标语言 → 拖拽 MTool 导出的 json → 自动 清洗-机翻-回填 → 实时进度
+- 拖拽支持需要 tkinterdnd2：pip install tkinterdnd2（未装时用「选择文件」按钮）
 """
 import json, re, sys, io, os, time, queue, random, hashlib, threading, traceback
 import urllib.request, urllib.parse
@@ -24,6 +22,86 @@ try:
 except ImportError:
     HAS_DND = False
 
+# ---------------- 界面文案（中/英） ----------------
+S = {
+    "zh": {
+        "title": "AutoMT — MTool JSON 自动机翻",
+        "lang_btn": "EN", "lang_of": "中文",
+        "src": "源语言:", "tgt": "→ 目标语言:",
+        "names_hint": "（人名表：json 同目录或本工具目录 names.txt）",
+        "autonames": "自动识别人名并保持一致",
+        "api_frame": "翻译接口（个人配置，保存到本机 .env，不会上传）",
+        "url": "URL:", "key": "Key:", "header": "请求头:",
+        "save_env": "保存到 .env",
+        "api_hint": "URL 用 {sl}/{tl}/{q} 占位符；留默认=免费端点（无需Key）。自定义接口逐条请求。",
+        "drop": "把 ManualTransFile.json 拖到这里\n（或点击选择文件）",
+        "drop_nodnd": "\n（提示：pip install tkinterdnd2 可启用拖拽）",
+        "start": "开始翻译", "cancel": "取消", "open_out": "打开输出文件夹",
+        "waiting": "等待文件…", "ready": "已就绪：{}", "done_stage": "③ 完成！",
+        "stage_clean": "① 文本清洗", "stage_trans": "② 机翻翻译", "stage_apply": "③ 回填校验",
+        "cancelled": "已取消", "error": "出错了",
+        "msg_done_t": "翻译完成", "msg_done_b": "已翻译 {} 条（{} 条校验失败保持原文）。\n\n输出文件：\n{}",
+        "msg_badurl": "接口 URL 有误", "msg_saved": "已保存",
+        "msg_saved_b": "配置已写入：\n{}", "msg_savefail": "保存失败",
+        "msg_type": "文件类型", "msg_type_b": "请拖入 .json 文件（MTool 导出的 ManualTransFile.json）",
+        "sel_file": "选择 MTool 导出的 json",
+        "no_trans": "没有需要翻译的条目（可能上次已全部翻完），已直接输出。",
+        # 管线日志
+        "log_auton": "自动识别专有名词 {} 个（已自动保持原文一致）: {}",
+        "log_auton_off": "自动人名识别已关闭：仅使用 names.txt 中的人工词条",
+        "log_zhko": "源语言为中文/韩文：无法自动识别人名，建议在 names.txt 中列出以保持一致",
+        "log_clean": "清洗完成：待翻 {} 条，人名表 {} 词",
+        "log_trans_b": "机翻开始（批量模式）：{} 条",
+        "log_trans_s": "机翻开始（分段模式）：{} 条",
+        "log_trans_ok": "机翻完成：{} 条，用时 {:.1f} 分钟",
+        "log_apply": "回填：成功 {}，记号丢失 {}，换行异常 {}",
+        "log_seg": "自动进入分段扫尾模式重翻失败条目…",
+        "log_speed": "{:.1f}条/秒 剩余{:.0f}分", "log_calc": "计算中",
+        "log_cancel": "正在取消…（等待当前请求结束）",
+        "log_cancelled": "已取消。进度已保存，重新开始可断点续翻。",
+        "log_cfg": "配置已保存到 {}（.env 已被 .gitignore 排除，不会上传）",
+        "log_start": "开始：{} → {}",
+    },
+    "en": {
+        "title": "AutoMT — MTool JSON Auto-Translator",
+        "lang_btn": "中文", "lang_of": "EN",
+        "src": "Source:", "tgt": "→ Target:",
+        "names_hint": "(names list: names.txt next to the json or next to this tool)",
+        "autonames": "Auto-detect names & keep consistent",
+        "api_frame": "Translation API (personal config, saved to local .env, never uploaded)",
+        "url": "URL:", "key": "Key:", "header": "Header:",
+        "save_env": "Save to .env",
+        "api_hint": "URL uses {sl}/{tl}/{q} placeholders; default = free endpoint (no key). Custom APIs are queried one-by-one.",
+        "drop": "Drop ManualTransFile.json here\n(or click to browse)",
+        "drop_nodnd": "\n(tip: pip install tkinterdnd2 enables drag & drop)",
+        "start": "Start", "cancel": "Cancel", "open_out": "Open output folder",
+        "waiting": "Waiting for a file…", "ready": "Ready: {}", "done_stage": "③ Done!",
+        "stage_clean": "① Clean & mask", "stage_trans": "② Translate", "stage_apply": "③ Validate & apply",
+        "cancelled": "Cancelled", "error": "Error",
+        "msg_done_t": "Translation complete",
+        "msg_done_b": "Translated {} strings ({} failed validation, kept original).\n\nOutput file:\n{}",
+        "msg_badurl": "Invalid API URL", "msg_saved": "Saved",
+        "msg_saved_b": "Configuration written to:\n{}", "msg_savefail": "Save failed",
+        "msg_type": "File type", "msg_type_b": "Please drop a .json file (MTool-exported ManualTransFile.json)",
+        "sel_file": "Select MTool-exported json",
+        "no_trans": "Nothing to translate (possibly all done in a previous run); output written directly.",
+        "log_auton": "Auto-detected {} proper nouns (kept consistent): {}",
+        "log_auton_off": "Auto name detection off: using only manual names.txt entries",
+        "log_zhko": "Source is Chinese/Korean: no auto name detection, list names in names.txt for consistency",
+        "log_clean": "Clean done: {} strings to translate, names list {} entries",
+        "log_trans_b": "Translating (batch mode): {} strings",
+        "log_trans_s": "Translating (segment mode): {} strings",
+        "log_trans_ok": "Translation done: {} strings in {:.1f} min",
+        "log_apply": "Apply: ok {}, token-lost {}, newline-mismatch {}",
+        "log_seg": "Falling back to segment-wise mode for failed strings…",
+        "log_speed": "{:.1f}/s, ~{:.0f} min left", "log_calc": "calculating",
+        "log_cancel": "Cancelling… (waiting for current request)",
+        "log_cancelled": "Cancelled. Progress saved; restart to resume.",
+        "log_cfg": "Config saved to {} (.env is gitignored, never uploaded)",
+        "log_start": "Start: {} → {}",
+    },
+}
+
 # ---------------- 翻译管线（与命令行版同源） ----------------
 BS = chr(92)
 MASK_PATTERNS = [
@@ -37,10 +115,10 @@ tokre = re.compile(r"〔T[0-9a-f]{8}〕")
 loose = re.compile(r"[〔【\[\(（]\s*[TtＴ]\s*([0-9a-fA-F]{8})\s*[〕】\]\)）]")
 FW = str.maketrans("０１２３４５６７８９ａｂｃｄｅｆＡＢＣＤＥＦ", "0123456789abcdefABCDEF")
 VALID_NEXT = set('nNvVcCiIpPGFSfuwMLjsbot' + BS + '{}<>|.^^$[]()')
-LANGS = [("英语 en", "en"), ("自动检测", "auto"), ("日语", "ja"), ("韩语", "ko"),
-         ("俄语", "ru"), ("法语", "fr"), ("德语", "de"), ("西班牙语", "es"),
-         ("葡萄牙语", "pt"), ("意大利语", "it"), ("泰语", "th"), ("越南语", "vi"),
-         ("印尼语", "id"), ("中文(简)", "zh-CN"), ("中文(繁)", "zh-TW")]
+LANGS = [("English", "en"), ("Auto · 自动", "auto"), ("日本語", "ja"), ("한국어", "ko"),
+         ("Русский", "ru"), ("Français", "fr"), ("Deutsch", "de"), ("Español", "es"),
+         ("Português", "pt"), ("Italiano", "it"), ("ไทย", "th"), ("Tiếng Việt", "vi"),
+         ("Bahasa", "id"), ("中文(简)", "zh-CN"), ("中文(繁)", "zh-TW")]
 
 def stable_tok(orig):
     return "〔T" + hashlib.md5(orig.encode("utf-8")).hexdigest()[:8] + "〕"
@@ -52,18 +130,19 @@ class Cancel(Exception):
     pass
 
 class Pipe:
-    """三段式管线，供 GUI 线程调用；cb(stage, done, total, note)"""
+    """三段式管线；cb(stage, done, total, note)；log(msg)"""
     def __init__(self, src_json, workdir, sl, tl, cancel, cb, log,
-                 endpoint=None, api_key=None, api_header=None, auto_names=True):
+                 endpoint=None, api_key=None, api_header=None, auto_names=True, lang="zh"):
         self.src, self.work, self.sl, self.tl = src_json, workdir, sl, tl
         self.cancel, self.cb, self.log = cancel, cb, log
         self.endpoint = (endpoint or "").strip() or mt_config.DEFAULT_ENDPOINT
         self.headers = mt_config.build_headers(api_key, api_header)
         self.auto_names = auto_names
+        self.L = S[lang if lang in S else "zh"]
 
     def load_names(self):
         names = []
-        base = os.path.dirname(os.path.abspath(__file__))
+        base = mt_config.base_dir()
         for cand in (os.path.join(os.path.dirname(self.src), "names.txt"),
                      os.path.join(base, "names.txt")):
             if os.path.exists(cand):
@@ -110,7 +189,6 @@ class Pipe:
         os.makedirs(self.work, exist_ok=True)
         orig = json.load(open(self.src, encoding="utf-8"))
         names = self.load_names()
-        # 自动人名识别：用户词条优先，未覆盖的高频专名自动掩码（保持原文一致）
         todo = [k for k, v in orig.items()
                 if isinstance(k, str) and k.strip() and not (isinstance(v, str) and v.strip())]
         user_set = {n.partition("=")[0].strip().lower() for n in names}
@@ -118,20 +196,20 @@ class Pipe:
             auto = [(w, c) for w, c in mt_config.detect_names(todo, self.sl)
                     if w.lower() not in user_set]
             if not auto and self.sl.split("-")[0].lower() in ("zh", "ko"):
-                self.log("源语言为中文/韩文：无法自动识别人名，建议在 names.txt 中列出以保持一致")
+                self.log(self.L["log_zhko"])
             names.extend(w for w, _ in auto)
             if auto:
-                self.log(f"自动识别专有名词 {len(auto)} 个（已自动保持原文一致）: "
-                         + ", ".join(f"{w}×{c}" for w, c in auto[:30]))
+                self.log(self.L["log_auton"].format(
+                    len(auto), ", ".join(f"{w}×{c}" for w, c in auto[:30])))
         elif user_set:
-            self.log("自动人名识别已关闭：仅使用 names.txt 中的人工词条")
+            self.log(self.L["log_auton_off"])
         tokens, name_zh, masked = {}, {}, {}
         for i, k in enumerate(todo):
             if self.cancel.is_set():
                 raise Cancel()
             masked[self.mask(k, tokens, names, name_zh)] = ""
             if i % 500 == 0:
-                self.cb("clean", i, len(todo), "清洗掩码")
+                self.cb("clean", i, len(todo), "")
         mp, tp = os.path.join(self.work, "masked.json"), os.path.join(self.work, "tokens.json")
         if os.path.exists(mp):   # 断点：保留旧译文
             prev = json.load(open(mp, encoding="utf-8"))
@@ -146,7 +224,7 @@ class Pipe:
         json.dump(tokens, open(tp, "w", encoding="utf-8"), ensure_ascii=False, indent=0)
         json.dump(name_zh, open(os.path.join(self.work, "names_map.json"), "w", encoding="utf-8"),
                   ensure_ascii=False, indent=0)
-        self.log(f"清洗完成：待翻 {len(masked)} 条，人名表 {len(names)} 词")
+        self.log(self.L["log_clean"].format(len(masked), len(names)))
         return masked, tokens
 
     # ---------- 端点 ----------
@@ -190,11 +268,11 @@ class Pipe:
                     raise
                 time.sleep(3 + 3 * a + random.random() * 2)
 
-    # ---------- 第二段：批量机翻 ----------
+    # ---------- 第二段：机翻 ----------
     def translate(self, masked, seg=False):
         keys = [k for k, v in masked.items() if not (isinstance(v, str) and v.strip())]
         total, t0, done = len(keys), time.time(), 0
-        self.log(f"机翻开始（{'分段' if seg else '批量'}模式）：{total} 条")
+        self.log(self.L["log_trans_s" if seg else "log_trans_b"].format(total))
         if seg:
             segre = re.compile(r"(〔T[0-9a-f]{8}〕)")
             for k in keys:
@@ -211,7 +289,7 @@ class Pipe:
                 masked[k] = "".join(out)
                 done += 1
                 if done % 10 == 0 or done >= total:
-                    self._save(masked, "分段")
+                    self._save(masked)
                     self.cb("trans", done, total, self._eta(t0, done, total))
         else:
             B = 8
@@ -231,20 +309,20 @@ class Pipe:
                 done += len(group)
                 gi += len(group)
                 if (gi // B) % 2 == 0 or done >= total:
-                    self._save(masked, "批量")
+                    self._save(masked)
                     self.cb("trans", done, total, self._eta(t0, done, total))
                 time.sleep(0.45 + random.random() * 0.5)
-        self._save(masked, "收尾")
-        self.log(f"机翻完成：{done} 条，用时 {(time.time()-t0)/60:.1f} 分钟")
+        self._save(masked)
+        self.log(self.L["log_trans_ok"].format(done, (time.time() - t0) / 60))
         return masked
 
-    def _save(self, masked, tag):
+    def _save(self, masked):
         json.dump(masked, open(os.path.join(self.work, "masked.json"), "w", encoding="utf-8"),
                   ensure_ascii=False, indent=1)
 
     def _eta(self, t0, done, total):
         r = done / (time.time() - t0)
-        return f"{r:.1f}条/秒 剩余{(total-done)/r/60:.0f}分" if r > 0 else "计算中"
+        return self.L["log_speed"].format(r, (total - done) / r / 60) if r > 0 else self.L["log_calc"]
 
     # ---------- 第三段：回填 ----------
     def apply(self, masked, tokens, auto_seg_sweep=True):
@@ -284,20 +362,19 @@ class Pipe:
                     continue
                 result[k] = zh
                 ok += 1
-            self.cb("apply", ok, max(ok + drop_tok + drop_nl, 1), "回填校验")
-            self.log(f"回填：成功 {ok}，记号丢失 {drop_tok}，换行异常 {drop_nl}")
+            self.cb("apply", ok, max(ok + drop_tok + drop_nl, 1), "")
+            self.log(self.L["log_apply"].format(ok, drop_tok, drop_nl))
             if not auto_seg_sweep or (drop_tok + drop_nl) == 0 or round_ == 1:
                 break
-            self.log("自动进入分段扫尾模式重翻失败条目…")
+            self.log(self.L["log_seg"])
             masked = self.translate(masked, seg=True)
-        # 写最终文件（键=英文原文精确匹配，值=中文）
         orig = json.load(open(self.src, encoding="utf-8"))
         out = dict(orig)
         for k, zh in result.items():
             out[key_of(k)] = zh
         dst = os.path.splitext(self.src)[0] + "_translated.json"
         json.dump(out, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-        self._save(masked, "final")
+        self._save(masked)
         return dst, ok, drop_tok + drop_nl
 
     def run(self):
@@ -306,56 +383,124 @@ class Pipe:
             orig = json.load(open(self.src, encoding="utf-8"))
             dst = os.path.splitext(self.src)[0] + "_translated.json"
             json.dump(orig, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-            self.log("没有需要翻译的条目（可能上次已全部翻完），已直接输出。")
+            self.log(self.L["no_trans"])
             return dst, 0, 0
         masked = self.translate(masked)
         return self.apply(masked, tokens)
 
 # ---------------- GUI ----------------
+ACCENT = "#2563eb"      # 主色
+ACCENT_HOVER = "#1d4ed8"
+BG = "#f5f6f8"
+DROP_BG = "#eef2ff"
+DROP_BORDER = "#c7d2fe"
+
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("AutoMT 机翻上位机 — MTool JSON 自动翻译")
-        root.geometry("680x520")
         self.q = queue.Queue()
         self.cancel = threading.Event()
         self.worker = None
         self.src_file = None
         self.out_file = None
+        env = mt_config.load_env()
+        self.lang = env.get("MT_LANG", "zh")
+        if self.lang not in S:
+            self.lang = "zh"
+        self._style()
         self._build()
         self.root.after(100, self._poll)
 
-    def _build(self):
-        top = ttk.Frame(self.root, padding=8)
-        top.pack(fill="x")
-        ttk.Label(top, text="源语言:").pack(side="left")
-        self.sl_var = tk.StringVar(value="英语 en")
-        ttk.Combobox(top, textvariable=self.sl_var, values=[n for n, _ in LANGS],
-                     width=10, state="readonly").pack(side="left", padx=4)
-        ttk.Label(top, text="  →  目标语言:").pack(side="left")
-        self.tl_var = tk.StringVar(value="中文(简)")
-        ttk.Combobox(top, textvariable=self.tl_var, values=[n for n, _ in LANGS],
-                     width=10, state="readonly").pack(side="left", padx=4)
-        self.autonames_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(top, text="自动识别人名并保持一致", variable=self.autonames_var).pack(side="left", padx=6)
-        ttk.Label(top, text="（人名表：输入 json 同目录或本工具目录 names.txt）").pack(side="left", padx=10)
+    def T(self, key):
+        return S[self.lang][key]
 
-        cfg = ttk.LabelFrame(self.root, text="翻译接口（个人配置，保存到本机 .env，不会进 git）", padding=6)
-        cfg.pack(fill="x", padx=12, pady=(6, 0))
-        ttk.Label(cfg, text="URL:").grid(row=0, column=0, sticky="w")
+    def _style(self):
+        st = ttk.Style()
+        try:
+            st.theme_use("clam")
+        except tk.TclError:
+            pass
+        base_font = ("Microsoft YaHei UI", 10) if self.lang == "zh" else ("Segoe UI", 10)
+        self.root.option_add("*Font", base_font)
+        st.configure("TFrame", background=BG)
+        st.configure("TLabelframe", background=BG, borderwidth=1, relief="solid")
+        st.configure("TLabelframe.Label", background=BG, foreground="#374151",
+                     font=(base_font[0], 10, "bold"))
+        st.configure("TLabel", background=BG, foreground="#1f2937")
+        st.configure("Hint.TLabel", foreground="#8a93a3", font=(base_font[0], 8))
+        st.configure("TButton", padding=(10, 5))
+        st.configure("Accent.TButton", foreground="#ffffff", background=ACCENT,
+                     padding=(16, 6), font=(base_font[0], 10, "bold"))
+        st.map("Accent.TButton",
+               background=[("active", ACCENT_HOVER), ("disabled", "#9db4f5")])
+        st.configure("TProgressbar", thickness=14, background=ACCENT,
+                     troughcolor="#e5e7eb")
+        st.configure("TCombobox", padding=(4, 3))
+
+    def _build(self):
+        self.root.title(self.T("title"))
+        self.root.geometry("720x600")
+        self.root.minsize(640, 540)
+        self.root.configure(bg=BG)
+
+        # ---- 顶栏：标题 + 语言切换 ----
+        head = ttk.Frame(self.root, padding=(14, 10, 14, 0))
+        head.pack(fill="x")
+        ttk.Label(head, text=self.T("title"),
+                  font=("Microsoft YaHei UI", 13, "bold"),
+                  foreground="#111827").pack(side="left")
+        self.lang_btn = tk.Button(head, text=self.T("lang_btn"), command=self.toggle_lang,
+                                  relief="flat", bg="#e5e7eb", fg="#374151",
+                                  activebackground="#d1d5db", padx=12, pady=2,
+                                  cursor="hand2", font=("Segoe UI", 9, "bold"))
+        self.lang_btn.pack(side="right")
+
+        # ---- 语言与选项行 ----
+        row1 = ttk.Frame(self.root, padding=(14, 8))
+        row1.pack(fill="x")
+        self.lbl_src = ttk.Label(row1, text=self.T("src"))
+        self.lbl_src.pack(side="left")
+        self.sl_var = tk.StringVar(value="English")
+        names_list = [n for n, _ in LANGS]
+        ttk.Combobox(row1, textvariable=self.sl_var, values=names_list,
+                     width=11, state="readonly").pack(side="left", padx=(4, 10))
+        self.lbl_tgt = ttk.Label(row1, text=self.T("tgt"))
+        self.lbl_tgt.pack(side="left")
+        self.tl_var = tk.StringVar(value="中文(简)" if self.lang == "zh" else "中文(简)")
+        ttk.Combobox(row1, textvariable=self.tl_var, values=names_list,
+                     width=11, state="readonly").pack(side="left", padx=4)
+        self.autonames_var = tk.BooleanVar(value=True)
+        self.ck_autonames = ttk.Checkbutton(row1, text=self.T("autonames"),
+                                            variable=self.autonames_var)
+        self.ck_autonames.pack(side="left", padx=14)
+        self.lbl_names_hint = ttk.Label(row1, text=self.T("names_hint"), style="Hint.TLabel")
+        self.lbl_names_hint.pack(side="left")
+
+        # ---- 接口配置 ----
+        cfg = ttk.LabelFrame(self.root, text=self.T("api_frame"), padding=8)
+        cfg.pack(fill="x", padx=14, pady=(4, 2))
+        self._cfg_frame = cfg
+        self.lbl_url = ttk.Label(cfg, text=self.T("url"))
+        self.lbl_url.grid(row=0, column=0, sticky="w")
         self.url_var = tk.StringVar(value=mt_config.DEFAULT_ENDPOINT)
-        ttk.Entry(cfg, textvariable=self.url_var).grid(row=0, column=1, columnspan=3, sticky="we", padx=4)
-        ttk.Label(cfg, text="Key:").grid(row=1, column=0, sticky="w")
+        ttk.Entry(cfg, textvariable=self.url_var).grid(row=0, column=1, columnspan=3,
+                                                       sticky="we", padx=4, pady=2)
+        self.lbl_key = ttk.Label(cfg, text=self.T("key"))
+        self.lbl_key.grid(row=1, column=0, sticky="w")
         self.key_var = tk.StringVar(value="")
-        ttk.Entry(cfg, textvariable=self.key_var, show="*").grid(row=1, column=1, sticky="we", padx=4)
-        ttk.Label(cfg, text="请求头:").grid(row=1, column=2, sticky="e")
+        ttk.Entry(cfg, textvariable=self.key_var, show="*").grid(row=1, column=1,
+                                                                 sticky="we", padx=4, pady=2)
+        self.lbl_header = ttk.Label(cfg, text=self.T("header"))
+        self.lbl_header.grid(row=1, column=2, sticky="e")
         self.hdr_var = tk.StringVar(value="Authorization")
-        ttk.Entry(cfg, textvariable=self.hdr_var, width=16).grid(row=1, column=3, sticky="w", padx=4)
-        ttk.Button(cfg, text="保存到 .env", command=self.save_env).grid(row=0, column=4, rowspan=2, padx=6)
-        ttk.Label(cfg, foreground="#777",
-                  text="URL 用 {sl}/{tl}/{q} 占位符；留默认=免费谷歌端点（无需Key）。自定义接口将逐条请求。"
-                  ).grid(row=2, column=0, columnspan=5, sticky="w")
+        ttk.Entry(cfg, textvariable=self.hdr_var, width=16).grid(row=1, column=3,
+                                                                 sticky="w", padx=4)
+        self.save_btn = ttk.Button(cfg, text=self.T("save_env"), command=self.save_env)
+        self.save_btn.grid(row=0, column=4, rowspan=2, padx=(8, 0))
+        self.lbl_api_hint = ttk.Label(cfg, text=self.T("api_hint"), style="Hint.TLabel")
+        self.lbl_api_hint.grid(row=2, column=0, columnspan=5, sticky="w", pady=(4, 0))
         cfg.columnconfigure(1, weight=1)
+
         env = mt_config.load_env()
         if env.get("MT_ENDPOINT"):
             self.url_var.set(env["MT_ENDPOINT"])
@@ -366,37 +511,90 @@ class App:
         if env.get("MT_AUTO_NAMES"):
             self.autonames_var.set(env["MT_AUTO_NAMES"] == "1")
 
-        self.drop = tk.Label(self.root, text="\n\n把 ManualTransFile.json 拖到这里\n（或点击选择文件）\n\n",
-                             relief="ridge", bd=2, pady=18, font=("Microsoft YaHei", 12),
-                             fg="#444", cursor="hand2")
-        self.drop.pack(fill="x", padx=12, pady=6)
+        # ---- 拖放区 ----
+        drop_text = self.T("drop") + (self.T("drop_nodnd") if not HAS_DND else "")
+        self.drop = tk.Label(self.root, text=drop_text, relief="flat",
+                             bg=DROP_BG, fg="#4b5563", padx=16, pady=26,
+                             font=("Microsoft YaHei UI", 12), cursor="hand2",
+                             highlightthickness=2, highlightbackground=DROP_BORDER)
+        self.drop.pack(fill="x", padx=14, pady=8)
         self.drop.bind("<Button-1>", lambda e: self.pick())
+        self.drop.bind("<Enter>", lambda e: self.drop.config(highlightbackground=ACCENT))
+        self.drop.bind("<Leave>", lambda e: self.drop.config(highlightbackground=DROP_BORDER))
         if HAS_DND:
             self.root.drop_target_register(DND_FILES)
             self.root.dnd_bind("<<Drop>>", lambda e: self.on_drop(self._dnd_clean(e.data)))
-        else:
-            self.drop.config(text=self.drop.cget("text") + "\n（提示：pip install tkinterdnd2 可启用拖拽）")
 
-        prog = ttk.Frame(self.root, padding=(12, 2))
+        # ---- 进度区 ----
+        prog = ttk.Frame(self.root, padding=(14, 2))
         prog.pack(fill="x")
-        self.stage_var = tk.StringVar(value="等待文件…")
-        ttk.Label(prog, textvariable=self.stage_var).pack(anchor="w")
-        self.bar = ttk.Progressbar(prog, maximum=100)
-        self.bar.pack(fill="x", pady=4)
+        self.stage_var = tk.StringVar(value=self.T("waiting"))
+        self.lbl_stage = ttk.Label(prog, textvariable=self.stage_var,
+                                   font=("Microsoft YaHei UI", 10, "bold"),
+                                   foreground=ACCENT)
+        self.lbl_stage.pack(anchor="w")
+        self.bar = ttk.Progressbar(prog, maximum=100, style="TProgressbar")
+        self.bar.pack(fill="x", pady=5)
         self.detail_var = tk.StringVar(value="")
-        ttk.Label(prog, textvariable=self.detail_var).pack(anchor="w")
+        ttk.Label(prog, textvariable=self.detail_var, style="Hint.TLabel").pack(anchor="w")
 
-        btns = ttk.Frame(self.root, padding=(12, 4))
+        # ---- 按钮区 ----
+        btns = ttk.Frame(self.root, padding=(14, 4))
         btns.pack(fill="x")
-        self.start_btn = ttk.Button(btns, text="开始翻译", command=self.start, state="disabled")
+        self.start_btn = ttk.Button(btns, text=self.T("start"), style="Accent.TButton",
+                                    command=self.start, state="disabled")
         self.start_btn.pack(side="left")
-        self.cancel_btn = ttk.Button(btns, text="取消", command=self.cancel_now, state="disabled")
-        self.cancel_btn.pack(side="left", padx=6)
-        self.open_btn = ttk.Button(btns, text="打开输出文件夹", command=self.open_out, state="disabled")
-        self.open_btn.pack(side="left", padx=6)
+        self.cancel_btn = ttk.Button(btns, text=self.T("cancel"), command=self.cancel_now,
+                                     state="disabled")
+        self.cancel_btn.pack(side="left", padx=8)
+        self.open_btn = ttk.Button(btns, text=self.T("open_out"), command=self.open_out,
+                                   state="disabled")
+        self.open_btn.pack(side="left")
 
-        self.logbox = ScrolledText(self.root, height=10, font=("Consolas", 9), state="disabled")
-        self.logbox.pack(fill="both", expand=True, padx=12, pady=(4, 10))
+        # ---- 日志 ----
+        self.logbox = ScrolledText(self.root, height=8, font=("Consolas", 9),
+                                   state="disabled", bg="#ffffff", relief="flat",
+                                   highlightthickness=1, highlightbackground="#e5e7eb")
+        self.logbox.pack(fill="both", expand=True, padx=14, pady=(6, 12))
+
+    # ---- 语言切换 ----
+    def toggle_lang(self):
+        self.lang = "en" if self.lang == "zh" else "zh"
+        mt_config.save_env({"MT_LANG": self.lang})
+        self.root.title(self.T("title"))
+        self.lang_btn.config(text=self.T("lang_btn"))
+        self.lbl_src.config(text=self.T("src"))
+        self.lbl_tgt.config(text=self.T("tgt"))
+        self.ck_autonames.config(text=self.T("autonames"))
+        self.lbl_names_hint.config(text=self.T("names_hint"))
+        self._rebuild_texts()
+
+    def _rebuild_texts(self):
+        # 更新 LabelFrame 标题需要保存引用——重建轻量文案控件即可
+        # 这里采用简单方案：销毁并重建配置区/拖放区文本
+        for w in (self.lbl_url, self.lbl_key, self.lbl_header, self.save_btn, self.lbl_api_hint):
+            w.destroy()
+        cfg = self._cfg_frame
+        self.lbl_url = ttk.Label(cfg, text=self.T("url"))
+        self.lbl_url.grid(row=0, column=0, sticky="w")
+        self.lbl_key = ttk.Label(cfg, text=self.T("key"))
+        self.lbl_key.grid(row=1, column=0, sticky="w")
+        self.lbl_header = ttk.Label(cfg, text=self.T("header"))
+        self.lbl_header.grid(row=1, column=2, sticky="e")
+        self.save_btn = ttk.Button(cfg, text=self.T("save_env"), command=self.save_env)
+        self.save_btn.grid(row=0, column=4, rowspan=2, padx=(8, 0))
+        self.lbl_api_hint = ttk.Label(cfg, text=self.T("api_hint"), style="Hint.TLabel")
+        self.lbl_api_hint.grid(row=2, column=0, columnspan=5, sticky="w", pady=(4, 0))
+        cfg.config(text=self.T("api_frame"))
+        self.drop.config(text=self.T("drop") + (self.T("drop_nodnd") if not HAS_DND else ""))
+        self.start_btn.config(text=self.T("start"))
+        self.cancel_btn.config(text=self.T("cancel"))
+        self.open_btn.config(text=self.T("open_out"))
+        if not self.worker or not self.worker.is_alive():
+            if self.stage_var.get() in (S["zh"]["waiting"], S["en"]["waiting"]):
+                self.stage_var.set(self.T("waiting"))
+            elif self.src_file and self.stage_var.get().startswith((S["zh"]["ready"][:3], S["en"]["ready"][:5])):
+                self.stage_var.set(self.T("ready").format(os.path.basename(self.src_file)))
 
     @staticmethod
     def _dnd_clean(data):
@@ -408,37 +606,25 @@ class App:
     def on_drop(self, path):
         path = path.strip().strip('"')
         if not path.lower().endswith(".json"):
-            messagebox.showerror("文件类型", "请拖入 .json 文件（MTool 导出的 ManualTransFile.json）")
+            messagebox.showerror(self.T("msg_type"), self.T("msg_type_b"))
             return
         self.set_file(path)
 
     def pick(self):
-        p = filedialog.askopenfilename(title="选择 MTool 导出的 json",
-                                       filetypes=[("JSON", "*.json"), ("所有文件", "*.*")])
+        p = filedialog.askopenfilename(title=self.T("sel_file"),
+                                       filetypes=[("JSON", "*.json"), ("All files", "*.*")])
         if p:
             self.set_file(p)
 
     def set_file(self, p):
         self.src_file = p
         self.out_file = None
-        self.stage_var.set(f"已就绪：{os.path.basename(p)}")
-        self.detail_var.set(f"路径：{p}")
+        self.stage_var.set(self.T("ready").format(os.path.basename(p)))
+        self.detail_var.set(p)
         self.start_btn.config(state="normal")
         self.open_btn.config(state="disabled")
-        self.log(f"已选择文件：{p}")
-
-    def save_env(self):
-        try:
-            mt_config.save_env({
-                "MT_ENDPOINT": self.url_var.get().strip(),
-                "MT_API_KEY": self.key_var.get().strip(),
-                "MT_API_HEADER": self.hdr_var.get().strip(),
-                "MT_AUTO_NAMES": "1" if self.autonames_var.get() else "0",
-            })
-            self.log(f"配置已保存到 {mt_config.env_path()}（.env 已在 .gitignore 中，不会上传）")
-            messagebox.showinfo("已保存", f"配置已写入：\n{mt_config.env_path()}")
-        except Exception as e:
-            messagebox.showerror("保存失败", str(e))
+        self.drop.config(fg="#15803d")
+        self.log(f"[file] {p}")
 
     def start(self):
         if not self.src_file or (self.worker and self.worker.is_alive()):
@@ -449,7 +635,7 @@ class App:
             mt_config.build_url(self.url_var.get().strip() or mt_config.DEFAULT_ENDPOINT,
                                 "test", sl, tl)
         except ValueError as e:
-            messagebox.showerror("接口 URL 有误", str(e))
+            messagebox.showerror(self.T("msg_badurl"), str(e))
             return
         h = hashlib.md5(self.src_file.encode()).hexdigest()[:8]
         work = os.path.join(mt_config.base_dir(), "mt_work", h)
@@ -457,12 +643,13 @@ class App:
                     endpoint=self.url_var.get().strip(),
                     api_key=self.key_var.get().strip(),
                     api_header=self.hdr_var.get().strip(),
-                    auto_names=self.autonames_var.get())
+                    auto_names=self.autonames_var.get(),
+                    lang=self.lang)
         self.cancel.clear()
         self.start_btn.config(state="disabled")
         self.cancel_btn.config(state="normal")
-        self.drop.config(fg="#888")
-        self.log(f"开始：{self.sl_var.get()} → {self.tl_var.get()}")
+        self.drop.config(fg="#6b7280")
+        self.log(self.T("log_start").format(self.sl_var.get(), self.tl_var.get()))
         self.worker = threading.Thread(target=self._work, args=(pipe,), daemon=True)
         self.worker.start()
 
@@ -480,11 +667,25 @@ class App:
 
     def cancel_now(self):
         self.cancel.set()
-        self.log("正在取消…（等待当前请求结束）")
+        self.log(self.T("log_cancel"))
 
     def open_out(self):
         if self.out_file and os.path.exists(self.out_file):
             os.startfile(os.path.dirname(self.out_file))
+
+    def save_env(self):
+        try:
+            mt_config.save_env({
+                "MT_ENDPOINT": self.url_var.get().strip(),
+                "MT_API_KEY": self.key_var.get().strip(),
+                "MT_API_HEADER": self.hdr_var.get().strip(),
+                "MT_AUTO_NAMES": "1" if self.autonames_var.get() else "0",
+                "MT_LANG": self.lang,
+            })
+            self.log(self.T("log_cfg").format(mt_config.env_path()))
+            messagebox.showinfo(self.T("msg_saved"), self.T("msg_saved_b").format(mt_config.env_path()))
+        except Exception as e:
+            messagebox.showerror(self.T("msg_savefail"), str(e))
 
     def _poll(self):
         try:
@@ -497,7 +698,8 @@ class App:
                     self.logbox.config(state="disabled")
                 elif kind == "prog":
                     stage, done, total, note = payload
-                    name = {"clean": "① 文本清洗", "trans": "② 机翻翻译", "apply": "③ 回填校验"}[stage]
+                    name = {"clean": self.T("stage_clean"), "trans": self.T("stage_trans"),
+                            "apply": self.T("stage_apply")}[stage]
                     pct = done * 100 // max(total, 1)
                     self.stage_var.set(f"{name}  {done}/{total}  （{pct}%）")
                     self.bar["value"] = pct
@@ -506,27 +708,26 @@ class App:
                     dst, ok, drop = payload
                     self.out_file = dst
                     self.bar["value"] = 100
-                    self.stage_var.set("③ 完成！")
-                    self.detail_var.set(f"回填成功 {ok} 条，丢弃 {drop} 条（保持原文显示）")
-                    self.log(f"输出文件：{dst}")
+                    self.stage_var.set(self.T("done_stage"))
+                    self.detail_var.set(f"ok={ok}, skipped={drop}")
+                    self.log(f"[output] {dst}")
                     self.start_btn.config(state="normal")
                     self.cancel_btn.config(state="disabled")
                     self.open_btn.config(state="normal")
-                    self.drop.config(fg="#080")
-                    messagebox.showinfo(
-                        "翻译完成",
-                        f"已翻译 {ok} 条（{drop} 条校验失败保持原文）。\n\n输出文件：\n{dst}")
+                    self.drop.config(fg="#15803d")
+                    messagebox.showinfo(self.T("msg_done_t"),
+                                        self.T("msg_done_b").format(ok, drop, dst))
                 elif kind == "cancelled":
-                    self.stage_var.set("已取消")
+                    self.stage_var.set(self.T("cancelled"))
                     self.start_btn.config(state="normal")
                     self.cancel_btn.config(state="disabled")
-                    self.log("已取消。进度已保存，重新开始可断点续翻。")
+                    self.log(self.T("log_cancelled"))
                 elif kind == "error":
-                    self.stage_var.set("出错了")
+                    self.stage_var.set(self.T("error"))
                     self.start_btn.config(state="normal")
                     self.cancel_btn.config(state="disabled")
-                    self.log("错误：\n" + payload)
-                    messagebox.showerror("出错了", payload[:1500])
+                    self.log(payload)
+                    messagebox.showerror(self.T("error"), payload[:1500])
         except queue.Empty:
             pass
         self.root.after(100, self._poll)

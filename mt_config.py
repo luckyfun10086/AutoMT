@@ -19,7 +19,8 @@ import os, re, sys, json, urllib.parse
 DEFAULT_ENDPOINT = ("https://clients5.google.com/translate_a/t"
                     "?client=dict-chrome-ex&sl={sl}&tl={tl}&q={q}")
 
-ENV_KEYS = ("MT_ENDPOINT", "MT_API_KEY", "MT_API_HEADER", "MT_SL", "MT_TL", "MT_AUTO_NAMES")
+ENV_KEYS = ("MT_ENDPOINT", "MT_API_KEY", "MT_API_HEADER", "MT_SL", "MT_TL",
+            "MT_AUTO_NAMES", "MT_LANG")
 
 def base_dir():
     """exe 旁边（PyInstaller 打包后 __file__ 在临时目录，须用 exe 自身位置）"""
