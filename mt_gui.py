@@ -499,6 +499,12 @@ class App:
 
     def _build(self):
         self.root.title(self.T("title"))
+        # 引擎识别结果（拖游戏目录时记录）
+        self.game_path = None
+        self.game_engine = None       # engine key
+        self.game_extract_script = None
+        self.apply_script = None
+
         self.root.geometry("720x600")
         self.root.minsize(640, 540)
         self.root.configure(bg=BG)
@@ -627,6 +633,10 @@ class App:
         self.open_btn = ttk.Button(btns, text=self.T("open_out"), command=self.open_out,
                                    state="disabled")
         self.open_btn.pack(side="left")
+        # 导入游戏按钮（引擎识别后激活）
+        self.apply_btn = ttk.Button(btns, text="📥 导入游戏 / Apply to Game",
+                                    command=self.apply_to_game, state="disabled")
+        self.apply_btn.pack(side="left", padx=8)
 
         # ---- 日志 ----
         self.logbox = ScrolledText(self.root, height=8, font=("Consolas", 9),
@@ -686,6 +696,15 @@ class App:
             if ok:
                 extract = mt_config.ENGINE_EXTRACTORS.get(eng)
                 if extract:
+                    # 记录游戏信息（后续回写用）
+                    self.game_path = path if os.path.isdir(path) else os.path.dirname(path)
+                    self.game_engine = eng
+                    self.game_extract_script = extract
+                    self.apply_script = {
+                        "rpg_mvmz": "rpg_apply.py",
+                        "srpg_studio": "srpg_apply.py",
+                        "unity": "unity_apply.py",
+                    }.get(eng)
                     # Unity 引擎需检查 UnityPy
                     if eng == "unity":
                         if not self._check_and_install_unitypy():
@@ -696,6 +715,10 @@ class App:
                             f"将运行 {extract}（可能需要几分钟）"):
                         self._run_extractor(path, extract)
                         return
+                    # 用户选"否"→ 仍启用导入按钮
+                    self.apply_btn.config(state="normal")
+                    self.log(f"[engine] {name} 已识别。可点击「导入游戏」按钮回写翻译。")
+                    return
             else:
                 messagebox.showwarning(
                     f"❌ {name} — 不支持",
@@ -871,6 +894,100 @@ class App:
         self.cancel.set()
         self.log(self.T("log_cancel"))
 
+    def apply_to_game(self):
+        """点击「导入游戏」按钮：找译文 json + 游戏路径，运行对应 apply 脚本"""
+        if not self.game_path or not self.apply_script:
+            messagebox.showwarning("Info", "请先拖入游戏目录进行引擎识别 / Drag a game folder first")
+            return
+        # 找最新译文 json
+        import glob as g
+        base = mt_config.base_dir()
+        cands = sorted(g.glob(os.path.join(base, "*_translated.json")),
+                       key=os.path.getmtime, reverse=True)
+        if not cands:
+            # 退而求其次：找 *_extracted_translated.json
+            cands = sorted(g.glob(os.path.join(base, "*_extracted_translated.json")),
+                           key=os.path.getmtime, reverse=True)
+        if not cands:
+            messagebox.showinfo(
+                "No Translation / 无译文",
+                "未找到已翻译的 json 文件。\n"
+                "请先完成翻译（开始翻译→完成），或手动选择译文文件。\n\n"
+                "No translated json found. Complete translation first,\n"
+                "or select a translated json file manually.")
+            return
+        trfile = cands[0]
+        if messagebox.askyesno(
+                "Apply to Game / 导入游戏",
+                f"译文文件: {os.path.basename(trfile)}\n"
+                f"游戏目录: {self.game_path}\n"
+                f"回写脚本: {self.apply_script}\n\n"
+                f"原文件将自动备份为 .automt.bak。确认导入？"):
+            self._run_applier(self.game_path, trfile, self.apply_script)
+
+    def _run_applier(self, game_path, trfile, script):
+        """在线程中运行回写脚本"""
+        base = mt_config.base_dir()
+        script_path = os.path.join(base, script)
+        if not os.path.exists(script_path):
+            messagebox.showerror("Error", f"脚本不存在: {script_path}")
+            return
+        self.log(f"[apply] 运行 {script} {game_path} {trfile}")
+        self.stage_var.set("回写中… / Applying…")
+        self.bar["value"] = 50
+        def worker():
+            import importlib.util, io as _io, glob as g
+            captured = []
+            old_argv = sys.argv
+            old_stdout = sys.stdout
+            try:
+                mod_name = script.replace(".py", "")
+                spec = importlib.util.spec_from_file_location(mod_name, script_path)
+                mod = importlib.util.module_from_spec(spec)
+                sys.argv = [script, game_path, trfile]
+                sys.stdout = _io.TextIOWrapper(_io.BytesIO(), encoding="utf-8")
+                spec.loader.exec_module(mod)
+                if hasattr(mod, "main"):
+                    mod.main()
+                elif hasattr(mod, "apply_all"):
+                    mod.apply_all()
+                try:
+                    sys.stdout.seek(0)
+                    captured = sys.stdout.read().strip().splitlines()
+                except Exception:
+                    pass
+                sys.stdout.close()
+                sys.stdout = old_stdout
+                sys.argv = old_argv
+                for line in captured[-6:]:
+                    self.log(f"  | {line}")
+                self.bar["value"] = 100
+                self.stage_var.set("✅ 已导入游戏 / Applied to Game")
+                self.q.put(("applied", game_path))
+            except SystemExit:
+                try:
+                    sys.stdout.seek(0)
+                    captured = sys.stdout.read().strip().splitlines()
+                except Exception:
+                    pass
+                try:
+                    sys.stdout.close()
+                except Exception:
+                    pass
+                sys.stdout = old_stdout
+                sys.argv = old_argv
+                msg = "\n".join(captured[-5:]) if captured else "apply 脚本退出"
+                self.q.put(("error", msg))
+            except Exception:
+                try:
+                    sys.stdout.close()
+                except Exception:
+                    pass
+                sys.stdout = old_stdout
+                sys.argv = old_argv
+                self.q.put(("error", traceback.format_exc()[-800:]))
+        threading.Thread(target=worker, daemon=True).start()
+
     def open_out(self):
         if self.out_file and os.path.exists(self.out_file):
             os.startfile(os.path.dirname(self.out_file))
@@ -919,8 +1036,31 @@ class App:
                     self.cancel_btn.config(state="disabled")
                     self.open_btn.config(state="normal")
                     self.drop.config(fg="#15803d")
-                    messagebox.showinfo(self.T("msg_done_t"),
-                                        self.T("msg_done_b").format(ok, drop, dst))
+                    # 翻译完成 → 如果之前识别过游戏引擎，询问是否立即导入
+                    if self.game_path and self.apply_script:
+                        self.apply_btn.config(state="normal")
+                        if messagebox.askyesno(
+                                "Apply to Game / 导入游戏",
+                                f"翻译完成！是否立即导入游戏？\n"
+                                f"Translation complete! Apply to game now?\n\n"
+                                f"游戏: {os.path.basename(self.game_path)}\n"
+                                f"引擎: {self.game_engine}\n"
+                                f"原文件将自动备份。"):
+                            self._run_applier(self.game_path, dst, self.apply_script)
+                        else:
+                            self.log("[hint] 可稍后点击「导入游戏」按钮回写翻译 / "
+                                     "Click 'Apply to Game' button later")
+                    else:
+                        messagebox.showinfo(self.T("msg_done_t"),
+                                            self.T("msg_done_b").format(ok, drop, dst))
+                elif kind == "applied":
+                    self.log(f"[applied] ✓ 翻译已导入游戏: {payload}")
+                    self.drop.config(fg="#0f7")
+                    messagebox.showinfo(
+                        "Applied / 已导入",
+                        f"翻译已成功导入游戏！\nTranslation applied successfully!\n\n"
+                        f"游戏: {payload}\n"
+                        f"原文件备份为 .automt.bak（如需还原改回原名即可）")
                 elif kind == "cancelled":
                     self.stage_var.set(self.T("cancelled"))
                     self.start_btn.config(state="normal")
@@ -928,6 +1068,7 @@ class App:
                     self.log(self.T("log_cancelled"))
                 elif kind == "extracted":
                     self.set_file(payload)
+                    self.apply_btn.config(state="normal")
                     self.log(f"[extract] 提取完成，已加载: {payload}")
                 elif kind == "error":
                     self.stage_var.set(self.T("error"))
