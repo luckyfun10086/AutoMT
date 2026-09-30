@@ -35,3 +35,9 @@ unity_manifest.json
 
 # Unity 沙箱
 _unity_sandbox/
+
+# 测试/运行产物
+_mock_*.json
+_tq_mock.json
+rva_game_*_*.json
+*.rpyb
