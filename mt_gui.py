@@ -196,7 +196,7 @@ class Pipe:
     # ---------- 第一段：清洗 ----------
     def clean(self):
         os.makedirs(self.work, exist_ok=True)
-        orig = json.load(open(self.src, encoding="utf-8"))
+        orig = mt_config.load_loose_json(self.src)
         names = self.load_names()
         todo = [k for k, v in orig.items()
                 if isinstance(k, str) and k.strip() and not (isinstance(v, str) and v.strip())]
@@ -416,7 +416,7 @@ class Pipe:
                 break
             self.log(self.L["log_seg"])
             masked = self.translate(masked, seg=True)
-        orig = json.load(open(self.src, encoding="utf-8"))
+        orig = mt_config.load_loose_json(self.src)
         out = dict(orig)
         for k, zh in result.items():
             out[key_of(k)] = zh

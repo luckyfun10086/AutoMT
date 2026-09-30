@@ -59,6 +59,8 @@ def extract(data_dir):
                     collect_from_list(pg["list"], out)
     for f in sorted(glob.glob(os.path.join(data_dir, "Map*.json"))):
         d = json.load(open(f, encoding="utf-8"))
+        if not isinstance(d, dict):
+            continue
         if isinstance(d.get("displayName"), str) and d["displayName"].strip():
             out[d["displayName"]] = ""
         walk_events(d.get("events", []))

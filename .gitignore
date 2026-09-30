@@ -23,3 +23,11 @@ dist/
 *.spec
 AutoMT.exe
 *.exe
+
+# SRPG 桥接：第三方工具（首次运行自动下载）与解包工作区
+bin/
+srpg_work/
+
+# 游戏提取产物（含游戏文本，绝不上传）
+*_extracted*.json
+*.extracted.json

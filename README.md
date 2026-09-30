@@ -142,6 +142,7 @@ work in every mode.
 |--------|---------------|--------|
 | RPG Maker **MZ** | `data/` | ✅ fully supported |
 | RPG Maker **MV** | `www/data/` (or `data/` in some distributions) | ✅ fully supported |
+| **SRPG Studio** | `data.dts` (with `runtime.rts`/`environment.evs`) | ✅ fully supported — bridges [SRPG-ToolBox](https://github.com/Sinflower/SRPG-ToolBox) (MIT), auto-downloaded on first run |
 | RPG Maker VX Ace / VX / XP | `.rvdata2` binary files | ❌ not supported (binary Marshal format) |
 | Wolf RPG Editor | `.wolf` archives | ❌ not supported |
 
@@ -164,6 +165,23 @@ better quality), scrolling text (405), choices (102), actor name/nickname change
 Safety: `rpg_apply.py` backs up originals to `data_backup/` first, only replaces
 exact-match blocks, and skips any block whose translated line count doesn't match —
 the game can never be corrupted by a bad translation.
+
+### SRPG Studio games
+
+```
+python srpg_extract.py <game-folder>   # auto: download tool → unpack → patch → collect
+python mt_clean.py <game>_extracted.json
+python mt_translate.py                 # MT or AI (set MT_API_TYPE=openai + model in .env)
+python mt_apply.py <game>_extracted.json
+python srpg_apply.py <game-folder> <game>_extracted_translated.json
+```
+
+Safety: original `data.dts` is backed up to `.automt.bak`; messages are re-chunked on
+original line boundaries (mismatched line counts are skipped, original kept); if
+`localization.dat` (official localization) is present it is disabled automatically —
+it would otherwise override custom translations. Battle-tested on a 943 MB game
+(6,985 strings extracted → 26 marker translations applied → repacked → re-parsed
+to confirm).
 
 ## CLI (equivalent to the GUI)
 

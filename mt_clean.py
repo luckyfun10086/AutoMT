@@ -84,7 +84,7 @@ def mask(s, tokens, names, name_zh):
 
 def main():
     src = sys.argv[1] if len(sys.argv) > 1 else "ManualTransFile.json"
-    data = json.load(open(src, encoding="utf-8"))
+    data = mt_config.load_loose_json(src)
     os.makedirs("mt_work", exist_ok=True)
     names = load_names()
     # 自动人名识别：用户词条优先，未覆盖的高频专名自动掩码（保持原文一致）

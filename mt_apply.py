@@ -18,11 +18,12 @@ AutoMT 第三步：替换原文（还原回填）
 """
 import json, re, sys, io, os
 from collections import Counter
+import mt_config
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 src = sys.argv[1] if len(sys.argv) > 1 else "ManualTransFile.json"
-orig = json.load(open(src, encoding="utf-8"))
+orig = mt_config.load_loose_json(src)
 data = json.load(open("mt_work/masked.json", encoding="utf-8"))
 tokens = json.load(open("mt_work/tokens.json", encoding="utf-8"))
 try:

@@ -110,6 +110,14 @@ def translate_once(text, sl, tl, endpoint=None, api_key=None, api_header=None,
         kind, msg = classify_error(e)
         raise ApiError(kind, msg) from None
 
+def load_loose_json(path):
+    """加载 MTool 翻译文件（trs）：宽容处理 BOM、CRLF、整行 // 注释。"""
+    txt = open(path, encoding="utf-8-sig").read()
+    txt = re.sub(r"(?m)^[ \t]*//.*$", "", txt)      # 整行注释
+    txt = re.sub(r"(?m)^(.*?\"(?:[^\"\\\\]|\\\\.)*\")(\s*,?\s*)//[^\n]*$",
+                 r"\1\2", txt)                       # 行尾注释（字符串后）
+    return json.loads(txt)
+
 def base_dir():
     """exe 旁边（PyInstaller 打包后 __file__ 在临时目录，须用 exe 自身位置）"""
     if getattr(sys, "frozen", False):

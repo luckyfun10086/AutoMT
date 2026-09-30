@@ -126,6 +126,7 @@ Bob               不写 = 号则保持英文原样
 |------|----------|----------|
 | RPG Maker **MZ** | `data/` | ✅ 完整支持 |
 | RPG Maker **MV** | `www/data/`（部分发行版在 `data/`） | ✅ 完整支持 |
+| **SRPG Studio** | `data.dts`（配 `runtime.rts`/`environment.evs`） | ✅ 完整支持（桥接 [SRPG-ToolBox](https://github.com/Sinflower/SRPG-ToolBox)，首次运行自动下载其命令行工具，MIT 开源） |
 | RPG Maker VX Ace / VX / XP | `.rvdata2` 二进制文件 | ❌ 不支持（二进制序列化格式） |
 | Wolf RPG Editor | `.wolf` 封包 | ❌ 不支持 |
 
@@ -147,6 +148,20 @@ python rpg_apply.py <游戏目录> game.extracted_translated.json   # 回写游�
 
 安全机制：回写前自动备份原文件到 `data_backup/`；只替换完全匹配的文本块；
 译文行数与原文不齐的一律跳过保持原文——**坏翻译绝不会损坏游戏**。
+
+### SRPG Studio 游戏专用流程
+
+```
+python srpg_extract.py <游戏目录>      # 自动：下载工具→解包→生成补丁→收集文本
+python mt_clean.py <游戏名>_extracted.json
+python mt_translate.py                # 机翻或 AI（.env 配 MT_API_TYPE=openai+模型）
+python mt_apply.py <游戏名>_extracted.json
+python srpg_apply.py <游戏目录> <游戏名>_extracted_translated.json
+```
+
+安全机制：原 `data.dts` 自动备份为 `.automt.bak`；消息按原始行边界切回，行数不齐
+一律跳过保原文；检测到 `localization.dat`（官方本地化）自动停用，否则会覆盖自定义
+翻译。已实弹验证（943MB 游戏：6985 条文本提取→26 条标记翻译→回包→再解析确认）。
 
 ## 命令行三步流程（与 GUI 等价）
 
