@@ -81,7 +81,6 @@ def json_string_values(node, out, key=None):
             out.append(node)
 
 def extract():
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     game = sys.argv[1]
     data_dir = find_data_dir(game)
     files = target_files(data_dir)
