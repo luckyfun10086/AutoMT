@@ -1,0 +1,18 @@
+# 个人隐私 —— 绝不入库
+.env
+
+# 本地人名表（游戏专属，各自维护；模板见 names.example.txt）
+names.txt
+names.local.txt
+
+# 工作目录（含原文/译文缓存，可能涉及未公开游戏文本）
+mt_work/
+
+# 测试产物（ManualTransFile 为 MTool 导出的游戏文本，勿上传）
+ManualTransFile*.json
+*_translated.json
+missing_wordy.json
+
+# Python
+__pycache__/
+*.pyc
