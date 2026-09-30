@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AutoMT 上位机（GUI，中英双语，三大功能分区）
+OmniTrans 上位机（GUI，中英双语，三大功能分区）
 =============================================
 - 标签页分区：⚡快速翻译（json 管线）/ 🎮游戏汉化（引擎识别→提取→翻译→导入）
   / ⚙设置（翻译接口配置）
@@ -33,7 +33,7 @@ except ImportError:
 # ---------------- 界面文案（中/英） ----------------
 S = {
     "zh": {
-        "title": "AutoMT — MTool JSON 自动机翻",
+        "title": "OmniTrans — 游戏一键机翻汉化",
         "lang_btn": "EN", "lang_of": "中文",
         "src": "源语言:", "tgt": "→ 目标语言:",
         "names_hint": "（人名表：json 同目录或本工具目录 names.txt）",
@@ -93,7 +93,7 @@ S = {
         "g_col_status": "支持状态",
     },
     "en": {
-        "title": "AutoMT — MTool JSON Auto-Translator",
+        "title": "OmniTrans — One-click Game Translator",
         "lang_btn": "中文", "lang_of": "EN",
         "src": "Source:", "tgt": "→ Target:",
         "names_hint": "(names list: names.txt next to the json or next to this tool)",

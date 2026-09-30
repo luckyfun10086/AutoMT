@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""AutoMT 配置层：.env 读写 + 自定义翻译接口支持。
+"""OmniTrans 配置层：.env 读写 + 自定义翻译接口支持。
 
 隐私设计（开源友好）：
 - 一切个人配置（自定义接口 URL / API Key / 请求头）都放 .env，.env 进 .gitignore

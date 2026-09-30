@@ -10,7 +10,7 @@ Unity 独立文本提取器
 用法：
     python unity_extract.py <游戏目录>
 输出：
-    <游戏名>_extracted.json   {原文: ""}，接 AutoMT 三步管线
+    <游戏名>_extracted.json   {原文: ""}，接 OmniTrans 三步管线
     unity_manifest.json        位置清单（回写用，勿删）
 """
 import json, sys, io, os, re, glob

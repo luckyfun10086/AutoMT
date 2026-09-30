@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Ren'Py 支持的终极交叉验证：官方翻译 tl 包 vs AutoMT 生成的 identifier/格式。
+"""Ren'Py 支持的终极交叉验证：官方翻译 tl 包 vs OmniTrans 生成的 identifier/格式。
 教程游戏自带官方法语翻译（引擎生成的 ground truth）——
-1. AutoMT 从 tutorial 的 .rpyc 提取 (identifier, 原文)
+1. OmniTrans 从 tutorial 的 .rpyc 提取 (identifier, 原文)
 2. 解析官方 tl/french 的 (identifier, 原文, 译文)
-3. identifier 集合与原文逐一对照；再用 AutoMT apply 生成 tl 并逐块 diff
+3. identifier 集合与原文逐一对照；再用 OmniTrans apply 生成 tl 并逐块 diff
 运行：python _test_renpy.py
 """
 import re, sys, io, os, glob, json, subprocess, shutil, tempfile
@@ -41,7 +41,7 @@ for p in glob.glob(os.path.join(TUT, "game/tl/french/*.rpy")):
 check("官方 tl 解析非空", len(official) > 50 and len(official_strings) > 50,
       f"say={len(official)} strings={len(official_strings)}")
 
-# ---------- 2. AutoMT 提取 tutorial ----------
+# ---------- 2. OmniTrans 提取 tutorial ----------
 gd = find_game_dir(TUT)
 trees = load_scripts(gd)
 items = []
@@ -49,7 +49,7 @@ for name, stmts in sorted(trees.items()):
     items += RC.collect_dialogue(stmts)
 by_ident = {i["identifier"]: i for i in items
             if i["kind"] == "say" and i.get("identifier")}
-check("AutoMT 提取 say 非空", len(by_ident) > 50, str(len(by_ident)))
+check("OmniTrans 提取 say 非空", len(by_ident) > 50, str(len(by_ident)))
 
 # ---------- 3. identifier 交叉对照 ----------
 inter = set(official) & set(by_ident)
@@ -58,10 +58,10 @@ check("identifier 交集 > 80%", len(inter) >= len(official) * 0.8,
 match = sum(1 for ident in inter
             if by_ident[ident]["what"] == official[ident][1])
 # 少量不一致 = 官方 tl 相对当前源码过时（教程改过错字）或源码转义形态差异；
-# AutoMT 提取的是 rpyc 运行时字符串（引擎匹配翻译用的正是它）
+# OmniTrans 提取的是 rpyc 运行时字符串（引擎匹配翻译用的正是它）
 check("交集内原文一致 ≥95%", match >= len(inter) * 0.95, f"{match}/{len(inter)}")
 
-# ---------- 4. 端到端：AutoMT apply 生成 tl → 与官方块对照 ----------
+# ---------- 4. 端到端：OmniTrans apply 生成 tl → 与官方块对照 ----------
 tr = {}
 for ident, (who, old, new) in official.items():
     tr[old] = new
@@ -75,7 +75,7 @@ r = subprocess.run([sys.executable, os.path.join(HERE, "renpy_apply.py"),
                    encoding="utf-8", cwd=HERE)
 check("apply 退出码 0", r.returncode == 0, r.stderr[-300:])
 
-gen = os.path.join(TUT, "game/tl/frenchtest/automt_script.rpy")
+gen = os.path.join(TUT, "game/tl/frenchtest/omnitrans_script.rpy")
 check("tl 包已生成", os.path.exists(gen))
 gen_txt = open(gen, encoding="utf-8").read()
 gen_blocks = {}
@@ -101,12 +101,12 @@ r = subprocess.run([sys.executable, os.path.join(HERE, "renpy_apply.py"),
                     TQ, trf2, "chinese"], capture_output=True, text=True,
                    encoding="utf-8", cwd=HERE)
 check("the_question apply", r.returncode == 0, r.stderr[-200:])
-tl2 = os.path.join(TQ, "game/tl/chinese/automt_script.rpy")
+tl2 = os.path.join(TQ, "game/tl/chinese/omnitrans_script.rpy")
 body = open(tl2, encoding="utf-8").read()
 check("tl 含 say 块", "translate chinese start_" in body and "【译】" in body)
 check("tl 含 strings 块", "translate chinese strings:" in body)
 # 游戏目录无任何原文件被改动
-check("非破坏性（tl 目录外无新文件）", os.path.exists(os.path.join(TQ, "game/tl/chinese/automt_script.rpy")))
+check("非破坏性（tl 目录外无新文件）", os.path.exists(os.path.join(TQ, "game/tl/chinese/omnitrans_script.rpy")))
 
 # 清理
 shutil.rmtree(os.path.join(TUT, "game/tl/frenchtest"), ignore_errors=True)

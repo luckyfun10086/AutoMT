@@ -1,21 +1,25 @@
-# AutoMT — MTool JSON Auto-Translator
+# OmniTrans — Engine-agnostic Game Translator
 
 **English** | [简体中文](README.zh-CN.md)
 
-Auto-translates MTool-exported `ManualTransFile.json` files (a `{"source": "translation"}`
-map where untranslated entries have empty values). Uses a free public translation endpoint
-by default — **no API key, no quota, no content filtering**. Alternatively, plug in your
-own translation API via the GUI (credentials stored in a local `.env`, never committed).
-Don't use MTool? See [Standalone RPG Maker extraction](#standalone-rpg-maker-extraction-no-mtool-needed) below.
+One-click game localization: drop a game folder — RPG Maker MV/MZ, VX Ace/VX/XP,
+SRPG Studio, Kirikiri, Ren'Py, TyranoScript, Unity — the engine is auto-detected,
+text is extracted, machine-translated and written back with automatic backups
+(Kirikiri/Ren'Py use non-destructive overlay patches). MTool-exported
+`ManualTransFile.json` files are also supported as input. Free public translation
+endpoint by default — **no API key, no quota, no content filtering** — or plug in
+your own DeepL/LLM API via the GUI (credentials stored in a local `.env`, never
+committed).
 
-> [MTool](https://mtool.app/) — the excellent game translation & modification tool this
-> project was built for (closed-source, official site: mtool.app).
+> [MTool](https://mtool.app/) — the excellent game translation & modification tool
+> whose JSON format this project originally automated (closed-source, mtool.app);
+> standalone engine support came later and outgrew the name.
 
 Validated on a 70,000+ string game text corpus.
 
 ## Download
 
-Grab `AutoMT.exe` from the [**Releases**](https://github.com/luckyfun10086/AutoMT/releases)
+Grab `OmniTrans.exe` from the [**Releases**](https://github.com/luckyfun10086/OmniTrans/releases)
 page — a standalone Windows binary, no Python required. Everything (`.env`, `names.txt`,
 `mt_work/`) is created next to the exe.
 
@@ -39,13 +43,13 @@ The window is organized into tabs:
    supported engine (and detected-but-unsupported ones with guidance)
 3. **⚙ Settings** — translation API configuration (saved to local `.env`)
 
-After translation finishes, AutoMT prompts to apply the result to the game
+After translation finishes, OmniTrans prompts to apply the result to the game
 and switches back to the Game tab. Cancel anytime — progress is resumable.
 
 > Drag & drop inside the packaged exe works out of the box. Running from source needs
 > `pip install tkinterdnd2` (falls back to a file picker without it).
 >
-> Rebuild the exe: `pip install pyinstaller && python -m PyInstaller --onefile --windowed --name AutoMT --collect-all tkinterdnd2 --collect-all sv_ttk mt_gui.py`
+> Rebuild the exe: `pip install pyinstaller && python -m PyInstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2 --collect-all sv_ttk mt_gui.py`
 
 Output: `yourfile_translated.json` next to the input — keys are exact original strings,
 so MTool picks them up directly.
@@ -124,7 +128,7 @@ random** — and the `=` form guarantees a uniform translated name throughout.
 
 ### Automatic detection (zero-config, per-language, toggleable)
 
-Without a names.txt, AutoMT detects proper nouns per source language and keeps them
+Without a names.txt, OmniTrans detects proper nouns per source language and keeps them
 consistent across the whole file:
 
 | Source language | Method | Notes |
@@ -160,7 +164,7 @@ Wolf RPG, NScripter — dropping such a folder tells you which engine it is and
 what to use instead.
 
 MV/MZ store all game text as plain JSON (`Map*.json`, `CommonEvents.json`,
-`Troops.json`, …) — AutoMT reads and patches them directly, no third-party tool
+`Troops.json`, …) — OmniTrans reads and patches them directly, no third-party tool
 required.
 
 ```
@@ -181,7 +185,7 @@ the game can never be corrupted by a bad translation.
 
 ### RPG Maker VX Ace / VX / XP games
 
-`.rvdata2` files are Ruby Marshal 4.8 dumps. AutoMT ships a pure-Python,
+`.rvdata2` files are Ruby Marshal 4.8 dumps. OmniTrans ships a pure-Python,
 zero-dependency Marshal codec (`rvdata.py`) that round-trips **byte-exact** —
 verified against hand-crafted ground-truth byte vectors, 300 random-tree fuzz
 cases, and bidirectional cross-validation against the `rubymarshal` library.
@@ -214,7 +218,7 @@ python krkr_apply.py <game-folder> <game>_extracted_translated.json
 ```
 
 Write-back is **non-destructive**: only the modified `.ks` files are packed into
-`patch_zz_automt.xp3` which mounts last and overrides the originals — delete
+`patch_zz_omnitrans.xp3` which mounts last and overrides the originals — delete
 that one file to uninstall. If Chinese text doesn't fit a CP932 script's
 encoding, the file is upgraded to UTF-16LE+BOM automatically (`--keep-enc` to
 skip such files instead).
@@ -233,7 +237,7 @@ python renpy_apply.py <game-folder> <game>_extracted_translated.json [language]
 ```
 
 `renpy_apply.py` generates an **official translation package** in
-`game/tl/<language>/automt_script.rpy` (default language `chinese`) —
+`game/tl/<language>/omnitrans_script.rpy` (default language `chinese`) —
 `translate <lang> <identifier>:` blocks for dialogue plus a
 `translate <lang> strings:` block for choices/UI text. Switch the language
 in-game (Preferences → Language) to see it; delete the folder to uninstall.

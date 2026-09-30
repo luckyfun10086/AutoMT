@@ -69,9 +69,9 @@ def main():
 
     tl_dir = os.path.join(game_dir, "tl", lang)
     os.makedirs(tl_dir, exist_ok=True)
-    dst = os.path.join(tl_dir, "automt_script.rpy")
+    dst = os.path.join(tl_dir, "omnitrans_script.rpy")
     with open(dst, "w", encoding="utf-8", newline="\n") as f:
-        f.write("# AutoMT generated translation package\n")
+        f.write("# OmniTrans generated translation package\n")
         f.write(f"# language: {lang} | say: {len(say_blocks)} | strings: {len(string_pairs)}\n\n")
         for ident, who, what, zh in say_blocks:
             f.write(f"translate {lang} {ident}:\n")

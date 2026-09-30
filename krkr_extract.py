@@ -101,7 +101,7 @@ def iter_game_archives(game):
     """游戏目录全部 .xp3，按文件名升序（后挂载覆盖先挂载——Kirikiri 约定）。
     排除本工具自己生成的 patch，防重复回写时把已译段当原文。"""
     arcs = [p for p in sorted(glob.glob(os.path.join(game, "*.xp3")))
-            if os.path.basename(p) != "patch_zz_automt.xp3"]
+            if os.path.basename(p) not in ("patch_zz_automt.xp3", "patch_zz_omnitrans.xp3")]
     return arcs
 
 

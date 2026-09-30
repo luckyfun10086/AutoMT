@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""AutoMT 开源版自测：.env 读写 + 自定义接口（模拟服务端，含密钥校验）"""
+"""OmniTrans 开源版自测：.env 读写 + 自定义接口（模拟服务端，含密钥校验）"""
 import io, sys, json, threading, os, tempfile, shutil, http.server, urllib.parse
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import mt_gui, mt_config

@@ -6,7 +6,7 @@ RPG Maker VX Ace / VX / XP 独立文本提取器（无需 MTool）
 
 直接解析 Data/ 下的二进制数据文件（纯 Python Marshal 解析器 rvdata.py），
 提取 对话(401,连续行合并)/滚动文本(405)/选项(102)/改名(320,324)/地图名/
-物品·技能描述/技能使用消息/角色昵称，输出 AutoMT 管线兼容的 {"原文": ""} 文件。
+物品·技能描述/技能使用消息/角色昵称，输出 OmniTrans 管线兼容的 {"原文": ""} 文件。
 
 用法：
     python rva_extract.py <游戏目录>     # → <游戏名>_extracted.json

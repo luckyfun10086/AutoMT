@@ -24,7 +24,7 @@ from krkr_extract import (decode_ks, encode_ks, kag_text_segments, translatable,
 def patch_name(game):
     """生成排在所有现有 patch 之后的封包名"""
     names = [os.path.basename(p) for p in glob.glob(os.path.join(game, "*.xp3"))]
-    return "patch_zz_automt.xp3" if names else "patch.xp3"
+    return "patch_zz_omnitrans.xp3" if names else "patch.xp3"
 
 
 def apply_ks(text, tr):

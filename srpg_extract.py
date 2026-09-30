@@ -6,7 +6,7 @@ SRPG Studio 独立提取器（桥接 Sinflower/SRPG-ToolBox）
 依赖 SRPG_Unpacker.exe（首次运行自动从 GitHub 下载到 bin/，MIT 开源）。
 
 流程：data.dts 解包 → 生成翻译补丁 JSON（105+ 个结构化文件）→
-收集全部日文文本 → 输出 AutoMT 标准 {原文: ""} 文件。
+收集全部日文文本 → 输出 OmniTrans 标准 {原文: ""} 文件。
 
 消息整段合并翻译（多行 data 元素以 \\n 连接，掩码管线保证换行数不变），
 回写由 srpg_apply.py 按原始边界切回。
@@ -14,7 +14,7 @@ SRPG Studio 独立提取器（桥接 Sinflower/SRPG-ToolBox）
 用法：
     python srpg_extract.py <游戏目录>
 输出：
-    <游戏名>_extracted.json（AutoMT 管线直接可用）
+    <游戏名>_extracted.json（OmniTrans 管线直接可用）
 """
 import json, sys, io, os, re, subprocess, urllib.request, hashlib
 import mt_config

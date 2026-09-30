@@ -1,19 +1,21 @@
-# AutoMT — MTool JSON 自动机翻工具
+# OmniTrans — 全引擎游戏自动机翻汉化
 
 [English](README.md) | **简体中文**
 
-把 MTool 导出的 `ManualTransFile.json`（`{"原文": "译文"}` 键值对，未翻条目译文为空）
-全自动机翻成中文。默认走内置免费端点（公开、无需密钥）；也可在界面里填入**你自己的
-翻译接口 URL 和 API Key**（保存在本机 `.env`，绝不入库）。不用 MTool？见下方
-[独立 RPG Maker 提取](#独立-rpg-maker-提取无需-mtool)。
+一键游戏汉化：把游戏目录拖进来——RPG Maker MV/MZ、VX Ace/VX/XP、SRPG Studio、
+Kirikiri、Ren'Py、TyranoScript、Unity——自动识别引擎，提取文本 → 机翻 → 回写，
+全程自动备份（Kirikiri/Ren'Py 为非破坏覆盖补丁）。也支持直接翻译 MTool 导出的
+`ManualTransFile.json`。默认走内置免费端点（公开、无需密钥、不审查内容），也可在
+界面里填入**你自己的 DeepL/LLM 翻译接口**（保存在本机 `.env`，绝不入库）。
 
-> [MTool](https://mtool.app/) —— 本项目为之打造的游戏翻译修改工具（非开源，官网 mtool.app）。
+> [MTool](https://mtool.app/) —— 本项目最初为之打造的翻译工具（其 JSON 格式是
+> 起点之一，非开源，官网 mtool.app）；后来的全引擎独立支持让工具长过了旧名字。
 
 已在 7 万+条游戏文本上实弹验证。
 
 ## 下载
 
-到 [**Releases**](https://github.com/luckyfun10086/AutoMT/releases) 页面下载 `AutoMT.exe`
+到 [**Releases**](https://github.com/luckyfun10086/OmniTrans/releases) 页面下载 `OmniTrans.exe`
 ——Windows 独立可执行文件，无需安装 Python。`.env`、`names.txt`、`mt_work/` 全部生成在
 exe 同目录。
 
@@ -90,7 +92,7 @@ AI 但好过留英文，结束汇总里报告兜底条数。`.env` 里 `MT_FALLB
 校验失败的条目自动进入分段扫尾重翻（记号绝不可能丢）。exe 版拖拽开箱即用；
 源码运行需 `pip install tkinterdnd2`（未装时自动退化为点选文件）。
 
-> 重新打包：`pip install pyinstaller && python -m PyInstaller --onefile --windowed --name AutoMT --collect-all tkinterdnd2 --collect-all sv_ttk mt_gui.py`
+> 重新打包：`pip install pyinstaller && python -m PyInstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2 --collect-all sv_ttk mt_gui.py`
 
 输出：输入文件同目录 `xxx_translated.json`（键=英文原文精确匹配，MTool 可直接用）。
 
@@ -143,7 +145,7 @@ Bob               不写 = 号则保持英文原样
 Wolf RPG、NScripter——拖入即提示引擎名称与替代方案。
 
 MV/MZ 的全部游戏文本都是明文 JSON（`Map*.json`、`CommonEvents.json`、
-`Troops.json` 等），AutoMT 直接读写，全程无需第三方工具。
+`Troops.json` 等），OmniTrans 直接读写，全程无需第三方工具。
 
 ```
 python rpg_extract.py <游戏目录>      # → game.extracted.json
@@ -162,7 +164,7 @@ python rpg_apply.py <游戏目录> game.extracted_translated.json   # 回写游�
 
 ### RPG Maker VX Ace / VX / XP 游戏
 
-`.rvdata2` 是 Ruby Marshal 4.8 二进制序列化。AutoMT 自带纯 Python 零依赖的
+`.rvdata2` 是 Ruby Marshal 4.8 二进制序列化。OmniTrans 自带纯 Python 零依赖的
 Marshal 编解码器（`rvdata.py`），读写**字节级还原**——经手工构造的规范字节串、
 300 轮随机树模糊测试、与 `rubymarshal` 库的双向交叉验证。
 
@@ -189,7 +191,7 @@ python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && pytho
 python krkr_apply.py <游戏目录> <游戏名>_extracted_translated.json
 ```
 
-回写**非破坏**：只有改动的 `.ks` 打成 `patch_zz_automt.xp3`（最后挂载、覆盖原文件），
+回写**非破坏**：只有改动的 `.ks` 打成 `patch_zz_omnitrans.xp3`（最后挂载、覆盖原文件），
 删除该文件即卸载汉化。CP932 脚本装不下中文时自动升级为 UTF-16LE+BOM
 （`--keep-enc` 改为跳过该文件）。
 
@@ -205,7 +207,7 @@ python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && pytho
 python renpy_apply.py <游戏目录> <游戏名>_extracted_translated.json [语言名]
 ```
 
-`renpy_apply.py` 生成**官方格式翻译包** `game/tl/<语言>/automt_script.rpy`（默认语言
+`renpy_apply.py` 生成**官方格式翻译包** `game/tl/<语言>/omnitrans_script.rpy`（默认语言
 `chinese`）——对话用 `translate <语言> <标识符>:` 块 + 选项/界面用
 `translate <语言> strings:` 块。游戏内 偏好设置→语言 切换生效；删除目录即卸载。
 游戏文件零改动。
