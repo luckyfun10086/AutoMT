@@ -815,8 +815,8 @@ class App:
             return
         try:
             from PIL import Image, ImageTk
-            img = Image.open(self.bg_path)
-            img.load()
+            with Image.open(self.bg_path) as fh:
+                img = fh.copy()                  # 句柄即开即关，避免锁住文件
         except Exception as e:
             self.log(f"[bg] 背景图加载失败，回退普通卡片 / failed to load: {e}")
             self.bg_path = ""
@@ -859,6 +859,55 @@ class App:
                 pass
 
     # ---------------- 背景图设置 ----------------
+    BG_NORMAL_MAX = 1600          # 标准化：最长边上限（投放卡渲染上限的 2 倍余量）
+    BG_NORMAL_DPI = (96, 96)      # 统一分辨率参数
+
+    def _hex_rgb(self, hx):
+        hx = hx.lstrip("#")
+        return tuple(int(hx[i:i + 2], 16) for i in (0, 2, 4))
+
+    def _normalize_bg(self, src):
+        """背景图导入标准化：EXIF 转正 → 压平透明（垫当前主题底色）→ RGB
+        → 最长边 ≤1600 LANCZOS 缩放 → 96 DPI → PNG/JPEG 择小存储。
+        返回标准化文件路径；失败抛异常。"""
+        from PIL import Image, ImageOps
+        with Image.open(src) as fh:              # copy 全量读入并立即关闭句柄
+            img = fh.copy()                      # （Windows 下残留句柄会锁文件）
+        src_kb = os.path.getsize(src) / 1024
+        ow, oh = img.size
+        try:                                   # 手机照片按 EXIF 方向转正
+            t = ImageOps.exif_transpose(img)
+            if t is not None:
+                img = t
+        except Exception:
+            pass
+        if img.mode in ("RGBA", "LA", "P"):
+            img = img.convert("RGBA")
+            base = Image.new("RGBA", img.size, self._hex_rgb(self.pal["bg"]) + (255,))
+            base.alpha_composite(img)
+            img = base.convert("RGB")
+        else:
+            img = img.convert("RGB")
+        w, h = img.size
+        scale = min(1.0, self.BG_NORMAL_MAX / max(w, h))
+        if scale < 1.0:
+            img = img.resize((max(1, round(w * scale)), max(1, round(h * scale))),
+                             Image.LANCZOS)
+        stem = os.path.join(mt_config.base_dir(), "bg_image.omnitrans")
+        p_png, p_jpg = stem + ".png", stem + ".jpg"
+        img.save(p_png, dpi=self.BG_NORMAL_DPI)
+        img.save(p_jpg, quality=88, dpi=self.BG_NORMAL_DPI)
+        keep, drop = (p_png, p_jpg) if os.path.getsize(p_png) <= os.path.getsize(p_jpg) \
+            else (p_jpg, p_png)
+        try:
+            os.remove(drop)
+        except OSError:
+            pass
+        self.log(f"[bg] 标准化 {ow}x{oh} {src_kb:.0f}KB → "
+                 f"{img.size[0]}x{img.size[1]} {os.path.getsize(keep)/1024:.0f}KB "
+                 f"({os.path.basename(keep)}, RGB, 96dpi) / normalized")
+        return keep
+
     def bg_pick(self):
         if not mt_config.check_pillow():
             if not messagebox.askyesno("Pillow", self.T("bg_pillow_q")):
@@ -874,13 +923,26 @@ class App:
                                                   ("All files", "*.*")])
         if not p:
             return
-        self.bg_path = p
-        mt_config.save_env({"MT_BG": p})
+        try:
+            norm = self._normalize_bg(p)
+        except Exception as e:
+            messagebox.showerror(self.T("error"), f"{p}\n{e}")
+            return
+        self.bg_path = norm
+        mt_config.save_env({"MT_BG": norm})
         self.bg_name_var.set(os.path.basename(p))
         self._build_drop_card(self._t1)
         self.log(f"[bg] 背景图已设置: {os.path.basename(p)}")
 
     def bg_clear(self):
+        # 一并清掉标准化产物（只删本工具生成的）
+        for ext in (".png", ".jpg"):
+            p = os.path.join(mt_config.base_dir(), "bg_image.omnitrans" + ext)
+            if self.bg_path and os.path.abspath(self.bg_path) == os.path.abspath(p)                     and os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
         self.bg_path = ""
         mt_config.save_env({"MT_BG": ""})     # 空值 = 删除该行
         self.bg_name_var.set(self.T("bg_none"))
