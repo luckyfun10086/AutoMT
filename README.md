@@ -66,7 +66,20 @@ anytime — progress is resumable.
 > and optionally `pip install sv-ttk` (modern Win11-style theming; without it a
 > classic theme is used).
 >
-> Rebuild the exe: `pip install pyinstaller && python -m PyInstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2 --collect-all sv_ttk mt_gui.py`
+> Rebuild the exe (engine scripts are bundled as data files — don't drop
+> the `--add-data` entries):
+```
+pip install pyinstaller
+pyinstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2 \
+  --collect-all sv_ttk \
+  --add-data "rpg_extract.py;." --add-data "rpg_apply.py;." \
+  --add-data "rva_extract.py;." --add-data "rva_apply.py;." --add-data "rvdata.py;." \
+  --add-data "srpg_extract.py;." --add-data "srpg_apply.py;." \
+  --add-data "krkr_extract.py;." --add-data "krkr_apply.py;." --add-data "krkr_xp3.py;." \
+  --add-data "renpy_extract.py;." --add-data "renpy_apply.py;." --add-data "renpy_rpyc.py;." \
+  --add-data "tyrano_extract.py;." --add-data "tyrano_apply.py;." \
+  --add-data "unity_extract.py;." --add-data "unity_apply.py;." mt_gui.py
+```
 
 Output: `yourfile_translated.json` next to the input — keys are exact original strings,
 so MTool picks them up directly.

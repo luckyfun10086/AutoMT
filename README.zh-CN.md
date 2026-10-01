@@ -104,7 +104,19 @@ AI 模式**一次请求批量翻 24 条**（带 id 对齐的 JSON、等长校验
 源码运行需 `pip install tkinterdnd2`（未装时自动退化为点选文件），可选
 `pip install sv-ttk`（Win11 风格现代主题，未装时用经典主题）。
 
-> 重新打包：`pip install pyinstaller && python -m PyInstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2 --collect-all sv_ttk mt_gui.py`
+> 重新打包（引擎脚本以数据文件形式打入 exe，`--add-data` 各项不可省略）：
+```
+pip install pyinstaller
+pyinstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2 \
+  --collect-all sv_ttk \
+  --add-data "rpg_extract.py;." --add-data "rpg_apply.py;." \
+  --add-data "rva_extract.py;." --add-data "rva_apply.py;." --add-data "rvdata.py;." \
+  --add-data "srpg_extract.py;." --add-data "srpg_apply.py;." \
+  --add-data "krkr_extract.py;." --add-data "krkr_apply.py;." --add-data "krkr_xp3.py;." \
+  --add-data "renpy_extract.py;." --add-data "renpy_apply.py;." --add-data "renpy_rpyc.py;." \
+  --add-data "tyrano_extract.py;." --add-data "tyrano_apply.py;." \
+  --add-data "unity_extract.py;." --add-data "unity_apply.py;." mt_gui.py
+```
 
 输出：输入文件同目录 `xxx_translated.json`（键=英文原文精确匹配，MTool 可直接用）。
 
