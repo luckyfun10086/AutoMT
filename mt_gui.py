@@ -100,6 +100,15 @@ S = {
                         "是否自动安装？（需要 Python 和 pip）\n"
                         "Background images require Pillow (not found). Install automatically?"),
         "bg_pillow_fail": "Pillow 安装失败",
+        # ---- 图书馆 ----
+        "tab_lib": "📚 图书馆",
+        "lib_title": "本地翻译记录（library.json，保存在本工具目录；翻译完成自动收录）",
+        "lib_col_name": "游戏名", "lib_col_engine": "引擎",
+        "lib_col_count": "条数", "lib_col_status": "状态", "lib_col_date": "日期",
+        "lib_st_done": "已翻译", "lib_st_applied": "✓ 已导入游戏",
+        "lib_open_game": "打开游戏目录", "lib_open_out": "打开译文", "lib_del": "删除记录",
+        "lib_empty": "还没有记录——去翻译一个游戏吧（翻译完成会自动出现在这里）",
+        "lib_sel": "请先在表中选中一个游戏",
     },
     "en": {
         "title": "OmniTrans — One-click Game Translator",
@@ -168,6 +177,15 @@ S = {
         "bg_pillow_q": ("Background images require the Pillow library (not found).\n\n"
                         "Install automatically? (requires Python & pip)"),
         "bg_pillow_fail": "Pillow installation failed",
+        # ---- Library ----
+        "tab_lib": "📚 Library",
+        "lib_title": "Local translation records (library.json next to the exe; entries are added automatically when a translation finishes)",
+        "lib_col_name": "Game", "lib_col_engine": "Engine",
+        "lib_col_count": "Strings", "lib_col_status": "Status", "lib_col_date": "Date",
+        "lib_st_done": "Translated", "lib_st_applied": "✓ Applied to game",
+        "lib_open_game": "Open game folder", "lib_open_out": "Open output", "lib_del": "Delete entry",
+        "lib_empty": "No records yet — translate a game and it will appear here automatically",
+        "lib_sel": "Select a game in the table first",
     },
 }
 
@@ -558,6 +576,7 @@ class App:
         self.bg_path = env.get("MT_BG", "")
         self._drop_note = ""
         self._bg_after = None
+        self.library = self._library_load()
         self._apply_theme()
         self._build()
         self._apply_widget_colors()
@@ -755,6 +774,114 @@ class App:
         self.bg_name_var.set(self.T("bg_none"))
         self._build_drop_card(self._t1)
         self.log("[bg] 背景图已清除")
+
+    # ---------------- 图书馆（本地翻译记录） ----------------
+    def _library_path(self):
+        return os.path.join(mt_config.base_dir(), "library.json")
+
+    def _library_load(self):
+        try:
+            d = json.load(open(self._library_path(), encoding="utf-8"))
+            if isinstance(d, dict) and isinstance(d.get("games"), list):
+                return d
+        except Exception:
+            pass
+        return {"games": []}
+
+    def _library_save(self):
+        try:
+            json.dump(self.library, open(self._library_path(), "w", encoding="utf-8"),
+                      ensure_ascii=False, indent=1)
+        except Exception as e:
+            self.log(f"[library] 保存失败: {e}")
+
+    @staticmethod
+    def _game_title_of(src_file, game_path):
+        """提取游戏名：游戏目录名优先；否则源文件名去掉管线后缀"""
+        if game_path:
+            return os.path.basename(os.path.abspath(game_path).rstrip("/\\"))
+        b = os.path.basename(src_file or "")
+        for suf in ("_extracted_translated.json", "_extracted.json",
+                    "_translated.json", ".json"):
+            if b.lower().endswith(suf):
+                b = b[:-len(suf)]
+                break
+        return b or "Untitled"
+
+    def library_add(self, src_file, ok, drop):
+        """翻译完成 → 收录/更新条目"""
+        name = self._game_title_of(src_file, self.game_path)
+        eng_key = self.game_engine or ""
+        eng_name = (mt_config.ENGINES.get(eng_key, {}) or {}).get("name", eng_key or "?")
+        entry = next((g for g in self.library["games"] if g.get("name") == name), None)
+        if entry is None:
+            entry = {"name": name, "applied": False}
+            self.library["games"].insert(0, entry)
+        entry.update({
+            "engine": eng_key, "engine_name": eng_name,
+            "translated": ok, "skipped": drop,
+            "translated_at": time.strftime("%Y-%m-%d %H:%M"),
+            "game_path": self.game_path or "",
+            "output": src_file or "",
+        })
+        self._library_save()
+        self._library_refresh()
+        self.log(f"[library] 已收录「{name}」（{eng_name}，{ok} 条）")
+
+    def library_mark_applied(self, game_path):
+        name = self._game_title_of(None, game_path)
+        entry = next((g for g in self.library["games"] if g.get("name") == name), None)
+        if entry:
+            entry["applied"] = True
+            entry["applied_at"] = time.strftime("%Y-%m-%d %H:%M")
+            self._library_save()
+            self._library_refresh()
+
+    def _library_refresh(self):
+        t = getattr(self, "lib_tree", None)
+        if t is None:
+            return
+        for iid in t.get_children():
+            t.delete(iid)
+        for i, g in enumerate(self.library["games"]):
+            st = self.T("lib_st_applied") if g.get("applied") else self.T("lib_st_done")
+            t.insert("", "end", iid=f"lib{i}", values=(
+                g.get("name", "?"), g.get("engine_name", "?"),
+                g.get("translated", 0), st, g.get("translated_at", "")))
+        if not self.library["games"]:
+            t.insert("", "end", iid="libempty", values=(self.T("lib_empty"), "", "", "", ""))
+
+    def _lib_selected(self):
+        sel = self.lib_tree.selection()
+        if not sel or sel[0] == "libempty":
+            messagebox.showinfo("Info", self.T("lib_sel"))
+            return None
+        idx = int(sel[0][3:])
+        return self.library["games"][idx] if idx < len(self.library["games"]) else None
+
+    def lib_open_game(self):
+        g = self._lib_selected()
+        if g and g.get("game_path") and os.path.isdir(g["game_path"]):
+            os.startfile(g["game_path"])
+        elif g:
+            self.lib_open_out()
+
+    def lib_open_out(self):
+        g = self._lib_selected()
+        if not g:
+            return
+        p = g.get("output", "")
+        d = p if os.path.isdir(p) else os.path.dirname(p)
+        if d and os.path.isdir(d):
+            os.startfile(d)
+
+    def lib_delete(self):
+        g = self._lib_selected()
+        if not g:
+            return
+        self.library["games"] = [x for x in self.library["games"] if x is not g]
+        self._library_save()
+        self._library_refresh()
 
     def _build(self):
         self.root.title(self.T("title"))
@@ -976,6 +1103,34 @@ class App:
         if env.get("MT_MODEL"):
             self.model_var.set(env["MT_MODEL"])
 
+        # ===== Tab4 图书馆 =====
+        t4 = ttk.Frame(self.nb, padding=10)
+        self.nb.add(t4, text=self.T("tab_lib"))
+        ttk.Label(t4, text=self.T("lib_title"), style="CardTitle.TLabel",
+                  font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w")
+        lcols = ("name", "engine", "count", "status", "date")
+        self.lib_tree = ttk.Treeview(t4, columns=lcols, show="headings", height=12)
+        for cid, txt, w in (("name", self.T("lib_col_name"), 260),
+                            ("engine", self.T("lib_col_engine"), 190),
+                            ("count", self.T("lib_col_count"), 70),
+                            ("status", self.T("lib_col_status"), 120),
+                            ("date", self.T("lib_col_date"), 130)):
+            self.lib_tree.heading(cid, text=txt)
+            self.lib_tree.column(cid, width=w, anchor="w")
+        self.lib_tree.pack(fill="both", expand=True, pady=(6, 6))
+        lbtns = ttk.Frame(t4)
+        lbtns.pack(fill="x")
+        self.lib_open_game_btn = ttk.Button(lbtns, text=self.T("lib_open_game"),
+                                            command=self.lib_open_game)
+        self.lib_open_game_btn.pack(side="left")
+        self.lib_open_out_btn = ttk.Button(lbtns, text=self.T("lib_open_out"),
+                                           command=self.lib_open_out)
+        self.lib_open_out_btn.pack(side="left", padx=8)
+        self.lib_del_btn = ttk.Button(lbtns, text=self.T("lib_del"),
+                                      command=self.lib_delete)
+        self.lib_del_btn.pack(side="left")
+        self._library_refresh()
+
         # ---- 全局拖放 ----
         if HAS_DND:
             self.root.drop_target_register(DND_FILES)
@@ -1025,6 +1180,16 @@ class App:
         self.nb.tab(0, text=self.T("tab_quick"))
         self.nb.tab(1, text=self.T("tab_game"))
         self.nb.tab(2, text=self.T("tab_cfg"))
+        if len(self.nb.tabs()) > 3:
+            self.nb.tab(3, text=self.T("tab_lib"))
+        for cid, key in (("name", "lib_col_name"), ("engine", "lib_col_engine"),
+                         ("count", "lib_col_count"), ("status", "lib_col_status"),
+                         ("date", "lib_col_date")):
+            self.lib_tree.heading(cid, text=self.T(key))
+        self.lib_open_game_btn.config(text=self.T("lib_open_game"))
+        self.lib_open_out_btn.config(text=self.T("lib_open_out"))
+        self.lib_del_btn.config(text=self.T("lib_del"))
+        self._library_refresh()
         self.g_extract_btn.config(text=self.T("g_extract"))
         self.g_translate_btn.config(text=self.T("g_translate"))
         self.apply_btn.config(text=self.T("g_apply"))
@@ -1405,6 +1570,7 @@ class App:
                 elif kind == "done":
                     dst, ok, drop = payload
                     self.out_file = dst
+                    self.library_add(dst, ok, drop)
                     self.bar["value"] = 100
                     self.stage_var.set(self.T("done_stage"))
                     self.detail_var.set(f"ok={ok}, skipped={drop}")
@@ -1434,6 +1600,7 @@ class App:
                                             self.T("msg_done_b").format(ok, drop, dst))
                 elif kind == "applied":
                     self.log(f"[applied] ✓ 翻译已导入游戏: {payload}")
+                    self.library_mark_applied(payload)
                     self._set_drop_note("ok")
                     self.g_extract_btn.config(state="normal")
                     messagebox.showinfo(

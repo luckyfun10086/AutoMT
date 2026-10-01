@@ -41,3 +41,4 @@ _mock_*.json
 _tq_mock.json
 rva_game_*_*.json
 *.rpyb
+library.json
