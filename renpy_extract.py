@@ -68,7 +68,10 @@ def load_scripts(game_dir, log=print):
 
 
 def main():
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    except Exception:
+        pass
     root = sys.argv[1] if len(sys.argv) > 1 else "."
     game_dir = find_game_dir(root)
     trees = load_scripts(game_dir)

@@ -103,7 +103,10 @@ def extract_system_json(game, out):
 
 
 def main():
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    except Exception:
+        pass
     game = sys.argv[1] if len(sys.argv) > 1 else "."
     sc = find_scenario(game)
     out = {}

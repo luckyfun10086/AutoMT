@@ -81,7 +81,10 @@ def extract(data_dir):
     return out, stats
 
 def main():
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    except Exception:
+        pass
     game = sys.argv[1] if len(sys.argv) > 1 else "."
     data_dir = find_data_dir(game)
     out, stats = extract(data_dir)

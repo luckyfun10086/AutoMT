@@ -111,7 +111,10 @@ def walk_patch(patchdir):
     return msgs, fields, nfiles
 
 def main():
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    except Exception:
+        pass
     game = sys.argv[1]
     work = prepare(game)
     print("③ 收集文本...")

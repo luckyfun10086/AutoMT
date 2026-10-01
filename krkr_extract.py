@@ -120,7 +120,10 @@ def effective_files(game, log=print):
 
 
 def main():
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    except Exception:
+        pass
     game = sys.argv[1] if len(sys.argv) > 1 else "."
     files = effective_files(game)
     scripts = {n: v for n, v in files.items() if n.lower().endswith(".ks")}

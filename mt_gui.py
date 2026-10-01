@@ -1632,6 +1632,7 @@ class App:
     def _run_extractor(self, game_path, script):
         """在线程中 import 提取脚本并调用 main()——避免 subprocess 在打包 exe 里打开新窗口"""
         script_path = self._resolve_script(script)
+        base = mt_config.base_dir()
         if not script_path:
             messagebox.showerror(
                 "Error", f"引擎脚本缺失: {script}\n\n"
@@ -1644,27 +1645,25 @@ class App:
         def worker():
             import importlib.util, io as _io
             captured = []
+            buf = _io.BytesIO()
+            cap = _io.TextIOWrapper(buf, encoding="utf-8")   # 持强引用：脚本替换
+            old_argv = sys.argv                              # sys.stdout 也不致被
+            old_stdout = sys.stdout                          # GC 关闭底层流
             try:
-                # 动态加载提取脚本
                 mod_name = script.replace(".py", "")
                 spec = importlib.util.spec_from_file_location(mod_name, script_path)
                 mod = importlib.util.module_from_spec(spec)
-                # 替换 sys.argv + 重定向 stdout 捕获输出
-                old_argv = sys.argv
-                old_stdout = sys.stdout
                 sys.argv = [script, game_path]
-                sys.stdout = _io.TextIOWrapper(_io.BytesIO(), encoding="utf-8")
+                sys.stdout = cap
                 spec.loader.exec_module(mod)
                 mod.main()
-                # 恢复环境
                 sys.argv = old_argv
+                sys.stdout = old_stdout
                 try:
-                    sys.stdout.seek(0)
-                    captured = sys.stdout.read().strip().splitlines()
+                    buf.seek(0)
+                    captured = buf.read().decode("utf-8", "replace").strip().splitlines()
                 except Exception:
                     pass
-                sys.stdout.close()
-                sys.stdout = old_stdout
                 for line in captured[-6:]:
                     self.log(f"  | {line}")
                 # 找最新生成的 *_extracted.json
@@ -1678,28 +1677,24 @@ class App:
                     self.q.put(("error", "提取完成但未找到输出文件: " +
                                 ("; ".join(captured[-3:]) if captured else "no output")))
             except SystemExit:
-                # 提取脚本 sys.exit（如 UnityPy 缺失提示）——恢复 stdout 并展示信息
+                sys.stdout = old_stdout
+                sys.argv = old_argv
                 try:
-                    sys.stdout.seek(0)
-                    captured = sys.stdout.read().strip().splitlines()
+                    buf.seek(0)
+                    captured = buf.read().decode("utf-8", "replace").strip().splitlines()
                 except Exception:
                     pass
-                try:
-                    sys.stdout.close()
-                except Exception:
-                    pass
-                sys.stdout = old_stdout if 'old_stdout' in dir() else sys.__stdout__
-                sys.argv = old_argv if 'old_argv' in dir() else sys.argv
                 msg = "\n".join(captured[-5:]) if captured else "提取脚本退出（无输出）"
                 self.q.put(("error", msg))
             except Exception:
+                sys.stdout = old_stdout
+                sys.argv = old_argv
+                self.q.put(("error", traceback.format_exc()[-800:]))
+            finally:
                 try:
-                    sys.stdout.close()
+                    cap.close()
                 except Exception:
                     pass
-                sys.stdout = old_stdout if 'old_stdout' in dir() else sys.__stdout__
-                sys.argv = old_argv if 'old_argv' in dir() else sys.argv
-                self.q.put(("error", traceback.format_exc()[-800:]))
         threading.Thread(target=worker, daemon=True).start()
 
     def pick(self):
@@ -1811,6 +1806,8 @@ class App:
         def worker():
             import importlib.util, io as _io, glob as g
             captured = []
+            buf = _io.BytesIO()
+            cap = _io.TextIOWrapper(buf, encoding="utf-8")   # 持强引用防 GC 关流
             old_argv = sys.argv
             old_stdout = sys.stdout
             try:
@@ -1818,47 +1815,43 @@ class App:
                 spec = importlib.util.spec_from_file_location(mod_name, script_path)
                 mod = importlib.util.module_from_spec(spec)
                 sys.argv = [script, game_path, trfile]
-                sys.stdout = _io.TextIOWrapper(_io.BytesIO(), encoding="utf-8")
+                sys.stdout = cap
                 spec.loader.exec_module(mod)
                 if hasattr(mod, "main"):
                     mod.main()
                 elif hasattr(mod, "apply_all"):
                     mod.apply_all()
-                try:
-                    sys.stdout.seek(0)
-                    captured = sys.stdout.read().strip().splitlines()
-                except Exception:
-                    pass
-                sys.stdout.close()
                 sys.stdout = old_stdout
                 sys.argv = old_argv
+                try:
+                    buf.seek(0)
+                    captured = buf.read().decode("utf-8", "replace").strip().splitlines()
+                except Exception:
+                    pass
                 for line in captured[-6:]:
                     self.log(f"  | {line}")
                 self.bar["value"] = 100
                 self.stage_var.set("✅ 已导入游戏 / Applied to Game")
                 self.q.put(("applied", game_path))
             except SystemExit:
-                try:
-                    sys.stdout.seek(0)
-                    captured = sys.stdout.read().strip().splitlines()
-                except Exception:
-                    pass
-                try:
-                    sys.stdout.close()
-                except Exception:
-                    pass
                 sys.stdout = old_stdout
                 sys.argv = old_argv
+                try:
+                    buf.seek(0)
+                    captured = buf.read().decode("utf-8", "replace").strip().splitlines()
+                except Exception:
+                    pass
                 msg = "\n".join(captured[-5:]) if captured else "apply 脚本退出"
                 self.q.put(("error", msg))
             except Exception:
-                try:
-                    sys.stdout.close()
-                except Exception:
-                    pass
                 sys.stdout = old_stdout
                 sys.argv = old_argv
                 self.q.put(("error", traceback.format_exc()[-800:]))
+            finally:
+                try:
+                    cap.close()
+                except Exception:
+                    pass
         threading.Thread(target=worker, daemon=True).start()
 
     def open_out(self):
