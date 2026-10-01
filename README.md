@@ -51,6 +51,10 @@ The window is organized into tabs:
    supported engine (and detected-but-unsupported ones with guidance)
 3. **⚙ Settings** — translation API configuration + custom background
    image for the drop card (needs Pillow, auto-install prompt; `MT_BG`)
+4. **📚 Library** — local record of every translated game (auto-registered
+   on completion, marked when applied)
+5. **✏️ Review** — search & hand-fix translations after a run, before
+   applying them to the game
 
 A **dark / light theme** toggle (☀/🌙, top-right) is persisted to `.env`
 (`MT_THEME`); dark is the default. After translation finishes, OmniTrans prompts
@@ -121,6 +125,11 @@ hiccups: automatic backoff). Blocked strings are automatically **retried via the
 free MT endpoint** (which has no content filter) — lower quality than AI but far better
 than leaving English; the run summary reports how many were salvaged. Disable with
 `MT_FALLBACK=0`.
+
+The **AI mode batches 24 strings per request** (id-aligned JSON with equal-length
+validation and graded fallback to per-string), and optionally attaches the
+neighbouring 2 lines as read-only context for tone/person consistency
+(`MT_CONTEXT=0` to disable).
 
 Equivalent `.env` keys are documented in [`.env.example`](.env.example).
 

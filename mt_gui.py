@@ -109,6 +109,20 @@ S = {
         "lib_open_game": "打开游戏目录", "lib_open_out": "打开译文", "lib_del": "删除记录",
         "lib_empty": "还没有记录——去翻译一个游戏吧（翻译完成会自动出现在这里）",
         "lib_sel": "请先在表中选中一个游戏",
+        # ---- 译文微调 ----
+        "tab_review": "✏️ 译文微调",
+        "rv_title": "翻译完成后、导入游戏前，在这里检查并修改译文（双击译文编辑）",
+        "rv_load": "加载译文", "rv_save": "保存修改",
+        "rv_col_orig": "原文", "rv_col_zh": "译文",
+        "rv_search": "搜索原文/译文…",
+        "rv_none": "未加载。点击「加载译文」（默认找最新的 *_translated.json）",
+        "rv_dirty": "本次已修改 {} 条",
+        "rv_limit": "文件共 {} 条，先显示前 {} 条——输入关键词可筛选全部",
+        "rv_saved": "已保存到 {}（{} 条，含修改 {} 条）",
+        "rv_pick": "选择译文 json",
+        "rv_edit_t": "修改译文",
+        "rv_orig": "原文（只读）", "rv_new": "译文（可编辑）",
+        "rv_ok": "保存此条", "rv_cancel": "取消",
     },
     "en": {
         "title": "OmniTrans — One-click Game Translator",
@@ -186,6 +200,20 @@ S = {
         "lib_open_game": "Open game folder", "lib_open_out": "Open output", "lib_del": "Delete entry",
         "lib_empty": "No records yet — translate a game and it will appear here automatically",
         "lib_sel": "Select a game in the table first",
+        # ---- Review / fine-tune ----
+        "tab_review": "✏️ Review",
+        "rv_title": "Check & fix translations after translating, before applying to the game (double-click a row to edit)",
+        "rv_load": "Load output", "rv_save": "Save changes",
+        "rv_col_orig": "Original", "rv_col_zh": "Translation",
+        "rv_search": "Search original/translation…",
+        "rv_none": "Nothing loaded. Click [Load output] (picks the newest *_translated.json)",
+        "rv_dirty": "{} entries edited this session",
+        "rv_limit": "{} entries in file, showing first {} — type a keyword to filter all",
+        "rv_saved": "Saved to {} ({} entries, {} edited)",
+        "rv_pick": "Choose a translated json",
+        "rv_edit_t": "Edit translation",
+        "rv_orig": "Original (read-only)", "rv_new": "Translation (editable)",
+        "rv_ok": "Save entry", "rv_cancel": "Cancel",
     },
 }
 
@@ -967,6 +995,106 @@ class App:
         self._library_save()
         self._library_refresh()
 
+    # ---------------- 译文微调 ----------------
+    def rv_load(self, path=None):
+        if path is None:
+            import glob as g
+            cands = sorted(g.glob(os.path.join(mt_config.base_dir(), "*_translated.json")),
+                            key=os.path.getmtime, reverse=True)
+            path = cands[0] if cands else filedialog.askopenfilename(
+                title=self.T("rv_pick"), filetypes=[("JSON", "*_translated.json"),
+                                                    ("JSON", "*.json")])
+        if not path or not os.path.exists(path):
+            return
+        try:
+            d = mt_config.load_loose_json(path)
+        except Exception as e:
+            messagebox.showerror(self.T("error"), str(e))
+            return
+        self.review_data = [[k, v if isinstance(v, str) else ""] for k, v in d.items()]
+        self.review_path = path
+        self.review_dirty = 0
+        self.rv_path_var.set(f"{os.path.basename(path)}  ({len(self.review_data)} 条)")
+        self.rv_save_btn.config(state="normal")
+        self.rv_search_var.set("")
+        self.rv_refresh()
+        self.log(f"[review] 已加载 {os.path.basename(path)}（{len(self.review_data)} 条）")
+
+    def rv_refresh(self):
+        t = self.rv_tree
+        for iid in t.get_children():
+            t.delete(iid)
+        kw = self.rv_search_var.get().strip().lower()
+        LIMIT = 2000
+        shown = 0
+        for i, (o, z) in enumerate(self.review_data):
+            if kw and kw not in o.lower() and kw not in z.lower():
+                continue
+            shown += 1
+            if shown > LIMIT:
+                break
+            t.insert("", "end", iid=f"r{i}", values=(o[:120], z[:120]))
+        if kw:
+            self.rv_path_var.set(
+                f"{os.path.basename(self.review_path)}  筛选 {min(shown, LIMIT)}/{len(self.review_data)} 条")
+        elif len(self.review_data) > LIMIT:
+            self.rv_path_var.set(
+                self.T("rv_limit").format(len(self.review_data), LIMIT))
+
+    def rv_edit(self):
+        sel = self.rv_tree.selection()
+        if not sel or not self.review_data:
+            return
+        idx = int(sel[0][1:])
+        orig, zh = self.review_data[idx]
+        win = tk.Toplevel(self.root)
+        win.title(self.T("rv_edit_t"))
+        win.geometry("760x420")
+        win.transient(self.root)
+        ttk.Label(win, text=self.T("rv_orig")).pack(anchor="w", padx=10, pady=(8, 0))
+        to = tk.Text(win, height=6, wrap="word", font=("Microsoft YaHei UI", 10))
+        to.pack(fill="x", padx=10)
+        to.insert("1.0", orig)
+        to.config(state="disabled")
+        ttk.Label(win, text=self.T("rv_new")).pack(anchor="w", padx=10, pady=(8, 0))
+        tz = tk.Text(win, height=8, wrap="word", font=("Microsoft YaHei UI", 10))
+        tz.pack(fill="both", expand=True, padx=10, pady=(0, 8))
+        tz.insert("1.0", zh)
+
+        def save():
+            new = tz.get("1.0", "end-1c")
+            self.review_data[idx][1] = new
+            if new != zh:
+                self.review_dirty += 1
+                self.rv_dirty_var.set(self.T("rv_dirty").format(self.review_dirty))
+            if self.rv_tree.exists(sel[0]):
+                self.rv_tree.item(sel[0], values=(orig[:120], new[:120]))
+            win.destroy()
+
+        btns = ttk.Frame(win)
+        btns.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(btns, text=self.T("rv_ok"), command=save,
+                   style="Accent.TButton").pack(side="left")
+        ttk.Button(btns, text=self.T("rv_cancel"), command=win.destroy).pack(
+            side="left", padx=8)
+        tz.focus_set()
+
+    def rv_save(self):
+        if not self.review_path or not self.review_data:
+            return
+        out = {k: v for k, v in self.review_data}
+        try:
+            json.dump(out, open(self.review_path, "w", encoding="utf-8"),
+                      ensure_ascii=False, indent=2)
+        except Exception as e:
+            messagebox.showerror(self.T("error"), str(e))
+            return
+        msg = self.T("rv_saved").format(self.review_path, len(out), self.review_dirty)
+        self.log(f"[review] {msg}")
+        self.review_dirty = 0
+        self.rv_dirty_var.set("")
+        messagebox.showinfo(self.T("msg_saved"), msg)
+
     def _build(self):
         self.root.title(self.T("title"))
         # 引擎识别结果（拖游戏目录时记录）
@@ -1215,6 +1343,41 @@ class App:
         self.lib_del_btn.pack(side="left")
         self._library_refresh()
 
+        # ===== Tab5 译文微调 =====
+        t5 = ttk.Frame(self.nb, padding=10)
+        self.nb.add(t5, text=self.T("tab_review"))
+        ttk.Label(t5, text=self.T("rv_title"), style="CardTitle.TLabel",
+                  font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w")
+        rrow = ttk.Frame(t5, padding=(0, 6))
+        rrow.pack(fill="x")
+        self.rv_load_btn = ttk.Button(rrow, text=self.T("rv_load"),
+                                      command=self.rv_load, style="Accent.TButton")
+        self.rv_load_btn.pack(side="left")
+        self.rv_save_btn = ttk.Button(rrow, text=self.T("rv_save"),
+                                      command=self.rv_save, state="disabled")
+        self.rv_save_btn.pack(side="left", padx=8)
+        self.rv_dirty_var = tk.StringVar(value="")
+        ttk.Label(rrow, textvariable=self.rv_dirty_var, style="Hint.TLabel").pack(
+            side="left", padx=10)
+        self.rv_search_var = tk.StringVar()
+        self.rv_search = ttk.Entry(rrow, textvariable=self.rv_search_var)
+        self.rv_search.pack(side="right", fill="x", expand=True, padx=(10, 0))
+        self.rv_path_var = tk.StringVar(value=self.T("rv_none"))
+        ttk.Label(t5, textvariable=self.rv_path_var, style="Hint.TLabel").pack(
+            anchor="w", pady=(0, 4))
+        rcols = ("orig", "zh")
+        self.rv_tree = ttk.Treeview(t5, columns=rcols, show="headings", height=13)
+        self.rv_tree.heading("orig", text=self.T("rv_col_orig"))
+        self.rv_tree.column("orig", width=400, anchor="w")
+        self.rv_tree.heading("zh", text=self.T("rv_col_zh"))
+        self.rv_tree.column("zh", width=400, anchor="w")
+        self.rv_tree.pack(fill="both", expand=True, pady=(0, 4))
+        self.rv_tree.bind("<Double-1>", lambda e: self.rv_edit())
+        self.rv_search_var.trace_add("write", lambda *a: self.rv_refresh())
+        self.review_data = []          # [(原文, 译文)]，保序
+        self.review_path = None
+        self.review_dirty = 0
+
         # ---- 全局拖放 ----
         if HAS_DND:
             self.root.drop_target_register(DND_FILES)
@@ -1266,6 +1429,14 @@ class App:
         self.nb.tab(2, text=self.T("tab_cfg"))
         if len(self.nb.tabs()) > 3:
             self.nb.tab(3, text=self.T("tab_lib"))
+        if len(self.nb.tabs()) > 4:
+            self.nb.tab(4, text=self.T("tab_review"))
+        self.rv_load_btn.config(text=self.T("rv_load"))
+        self.rv_save_btn.config(text=self.T("rv_save"))
+        self.rv_tree.heading("orig", text=self.T("rv_col_orig"))
+        self.rv_tree.heading("zh", text=self.T("rv_col_zh"))
+        if not self.review_data:
+            self.rv_path_var.set(self.T("rv_none"))
         for cid, key in (("name", "lib_col_name"), ("engine", "lib_col_engine"),
                          ("count", "lib_col_count"), ("status", "lib_col_status"),
                          ("date", "lib_col_date")):
@@ -1655,6 +1826,8 @@ class App:
                     dst, ok, drop = payload
                     self.out_file = dst
                     self.library_add(dst, ok, drop)
+                    self.log("[hint] 可先在「✏️ 译文微调」页检查修改，再导入游戏 / "
+                             "Review & fix translations before applying")
                     self.bar["value"] = 100
                     self.stage_var.set(self.T("done_stage"))
                     self.detail_var.set(f"ok={ok}, skipped={drop}")
