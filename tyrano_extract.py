@@ -13,6 +13,7 @@ TyranoScript（HTML5 视觉小说引擎）的游戏文本在 data/scenario/*.ks�
 import json, sys, io, os, glob, re
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mt_config
 
 TAG_SPLIT = re.compile(r"\[[^\[\]\r\n]*\]")
 HAS_LETTER = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7afA-Za-z]")
@@ -113,7 +114,7 @@ def main():
         n_files += 1
     n_sys = extract_system_json(game, out)
     base = os.path.basename(os.path.abspath(game).rstrip("/\\"))
-    dst = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"{base}_extracted.json")
+    dst = os.path.join(mt_config.base_dir(), f"{base}_extracted.json")
     json.dump(out, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     chars = sum(len(k) for k in out)
     print(f"剧本 {n_files} 个 + 系统 json；提取唯一文本 {len(out)} 条（{chars} 字符）")

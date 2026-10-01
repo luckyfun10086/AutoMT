@@ -17,6 +17,7 @@ Ren'Py 文本提取器（无需 MTool / unrpyc）
 import json, sys, io, os, glob
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mt_config
 import renpy_rpyc as RC
 
 
@@ -85,7 +86,7 @@ def main():
                 out[s] = ""
                 n_str += 1
     base = os.path.basename(os.path.abspath(root).rstrip("/\\"))
-    dst = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"{base}_extracted.json")
+    dst = os.path.join(mt_config.base_dir(), f"{base}_extracted.json")
     json.dump(out, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     chars = sum(len(k) for k in out)
     print(f"脚本 {len(trees)} 个：对话 {n_say}，选项 {n_choice}，界面字符串 {n_str}")

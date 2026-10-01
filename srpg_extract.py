@@ -26,7 +26,8 @@ SKIP_KEYS = {"type", "comment", "commandMsg", "customParameters", "command",
              "speaker", "id", "variable", "icon", "file", "path"}
 
 def base():
-    return os.path.dirname(os.path.abspath(__file__))
+    import mt_config
+    return mt_config.base_dir()
 
 def ensure_unpacker():
     exe = os.path.join(base(), "bin", "SRPG_Unpacker.exe")

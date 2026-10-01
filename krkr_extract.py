@@ -15,6 +15,7 @@ Kirikiri (吉里吉里) 文本提取器 — XP3 封包 + KAG 脚本
 import json, sys, io, os, glob, re
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mt_config
 import krkr_xp3 as X
 
 # 含「可翻文字」判定：假名/汉字/谚文（纯 ASCII 段多为代码/标签残留，跳过）
@@ -139,7 +140,7 @@ def main():
         for k in out_all:
             out.setdefault(k, "")
     base = os.path.basename(os.path.abspath(game).rstrip("/\\"))
-    dst = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"{base}_extracted.json")
+    dst = os.path.join(mt_config.base_dir(), f"{base}_extracted.json")
     json.dump(out, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     chars = sum(len(k) for k in out)
     print(f"封包 {len(iter_game_archives(game))} 个，生效文件 {len(files)}，脚本 {n_read} 个")

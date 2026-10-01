@@ -15,6 +15,7 @@ RPG Maker MV/MZ 独立文本提取器（无需 MTool）
     python rpg_extract.py <游戏目录>        # 输出 game.extracted.json
 """
 import json, sys, io, os, glob
+import mt_config
 
 def find_data_dir(game):
     for cand in ("data", "www/data"):
@@ -84,7 +85,7 @@ def main():
     game = sys.argv[1] if len(sys.argv) > 1 else "."
     data_dir = find_data_dir(game)
     out, stats = extract(data_dir)
-    dst = os.path.join(os.path.dirname(os.path.abspath(__file__)), "game.extracted.json")
+    dst = os.path.join(mt_config.base_dir(), "game.extracted.json")
     json.dump(out, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     chars = sum(len(k) for k in out)
     print(f"扫描 {len(stats)} 个数据文件，提取唯一文本 {len(out)} 条（{chars} 字符）")

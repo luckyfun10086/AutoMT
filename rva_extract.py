@@ -14,6 +14,7 @@ RPG Maker VX Ace / VX / XP 独立文本提取器（无需 MTool）
 import json, sys, io, os, glob
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mt_config
 import rvdata as R
 
 
@@ -163,7 +164,7 @@ def main():
         if extract_file(f, os.path.basename(f), out):
             n_ok += 1
     base = os.path.basename(os.path.abspath(game).rstrip("/\\"))
-    dst = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"{base}_extracted.json")
+    dst = os.path.join(mt_config.base_dir(), f"{base}_extracted.json")
     json.dump(out, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     chars = sum(len(k) for k in out)
     print(f"扫描 {n_ok}/{len(files)} 个数据文件，提取唯一文本 {len(out)} 条（{chars} 字符）")

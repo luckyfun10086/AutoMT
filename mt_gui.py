@@ -1616,12 +1616,27 @@ class App:
             "请手动运行 / Please run manually:\n  pip install UnityPy")
         return False
 
+    def _resolve_script(self, script):
+        """定位引擎脚本：打包 exe 优先查 PyInstaller 数据区(_MEIPASS)，其次 exe 旁，最后源码目录"""
+        cands = []
+        if getattr(sys, "frozen", False):
+            mp = getattr(sys, "_MEIPASS", "")
+            if mp:
+                cands.append(os.path.join(mp, script))
+        cands.append(os.path.join(mt_config.base_dir(), script))
+        for c in cands:
+            if c and os.path.exists(c):
+                return c
+        return None
+
     def _run_extractor(self, game_path, script):
         """在线程中 import 提取脚本并调用 main()——避免 subprocess 在打包 exe 里打开新窗口"""
-        base = mt_config.base_dir()
-        script_path = os.path.join(base, script)
-        if not os.path.exists(script_path):
-            messagebox.showerror("Error", f"脚本不存在: {script_path}")
+        script_path = self._resolve_script(script)
+        if not script_path:
+            messagebox.showerror(
+                "Error", f"引擎脚本缺失: {script}\n\n"
+                f"Engine script missing — 请把 OmniTrans.exe 与发行文件放在一起，"
+                f"或重新下载完整发行包 / keep the exe together with the release files")
             return
         self.log(f"[extract] 运行 {script} {game_path}")
         self.stage_var.set("提取中… / Extracting…")
@@ -1786,10 +1801,9 @@ class App:
 
     def _run_applier(self, game_path, trfile, script):
         """在线程中运行回写脚本"""
-        base = mt_config.base_dir()
-        script_path = os.path.join(base, script)
-        if not os.path.exists(script_path):
-            messagebox.showerror("Error", f"脚本不存在: {script_path}")
+        script_path = self._resolve_script(script)
+        if not script_path:
+            messagebox.showerror("Error", f"引擎脚本缺失: {script}")
             return
         self.log(f"[apply] 运行 {script} {game_path} {trfile}")
         self.stage_var.set("回写中… / Applying…")
