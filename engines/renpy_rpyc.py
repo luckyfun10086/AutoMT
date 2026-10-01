@@ -12,6 +12,10 @@
   首行 "RPA-3.0 <hex偏移> <hex密钥>" / "RPA-2.0 <hex偏移>"
   偏移处 zlib(pickle({名: [(偏移^密钥, 长度, 前缀), ...]}))
 """
+import os, sys
+_ENG = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_ENG))    # 项目根：mt_config 等
+sys.path.insert(0, _ENG)                     # 引擎同目录：krkr_xp3 等
 import io as _io
 import pickle as _pickle
 import re

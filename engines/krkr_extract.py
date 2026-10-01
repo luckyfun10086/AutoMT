@@ -14,7 +14,9 @@ Kirikiri (吉里吉里) 文本提取器 — XP3 封包 + KAG 脚本
 """
 import json, sys, io, os, glob, re
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_ENG = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_ENG))    # 项目根：mt_config 等
+sys.path.insert(0, _ENG)                     # 引擎同目录：krkr_xp3 等
 import mt_config
 import krkr_xp3 as X
 

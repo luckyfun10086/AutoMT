@@ -10,7 +10,9 @@ TyranoScript 回写器
 """
 import json, sys, io, os, glob, shutil
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_ENG = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_ENG))    # 项目根：mt_config 等
+sys.path.insert(0, _ENG)                     # 引擎同目录：krkr_xp3 等
 from tyrano_extract import (find_scenario, text_segments, translatable,
                             MACRO_RE, ENDMACRO_RE, IScript_RE)
 

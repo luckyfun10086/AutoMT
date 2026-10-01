@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 """OmniTrans 开源版自测：.env 读写 + 自定义接口（模拟服务端，含密钥校验）"""
+import os, sys
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "engines"))
+
 import io, sys, json, threading, os, tempfile, shutil, http.server, urllib.parse
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import mt_gui, mt_config
@@ -46,7 +51,7 @@ assert ok == 2 and drop == 0
 assert '\\c[2]code' in out['with \\c[2]code\nline2'] and '\n' in out['with \\c[2]code\nline2']
 srv.shutdown()
 shutil.rmtree(tmp)
-os.remove('.env')
+os.remove(os.path.join(ROOT, '.env'))
 
 # 3) AI 翻译（OpenAI 兼容）：模拟 chat/completions，校验 POST 体/鉴权/模型/记号
 class AI(http.server.BaseHTTPRequestHandler):

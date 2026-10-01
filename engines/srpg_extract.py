@@ -16,6 +16,11 @@ SRPG Studio 独立提取器（桥接 Sinflower/SRPG-ToolBox）
 输出：
     <游戏名>_extracted.json（OmniTrans 管线直接可用）
 """
+import os, sys
+_ENG = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_ENG))    # 项目根：mt_config 等
+sys.path.insert(0, _ENG)                     # 引擎同目录：krkr_xp3 等
+
 import json, sys, io, os, re, subprocess, urllib.request, hashlib
 import mt_config
 

@@ -10,6 +10,10 @@ import re, sys, io, os, glob, json, subprocess, shutil, tempfile
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+ENG = os.path.join(ROOT, "engines")
+sys.path.insert(0, ROOT)
+sys.path.insert(0, ENG)
 sys.path.insert(0, HERE)
 from renpy_extract import find_game_dir, load_scripts
 import renpy_rpyc as RC
@@ -70,7 +74,7 @@ for old, new in official_strings.items():
 trf = os.path.join(tempfile.gettempdir(), "_automt_tut_tr.json")
 json.dump(tr, open(trf, "w", encoding="utf-8"), ensure_ascii=False)
 
-r = subprocess.run([sys.executable, os.path.join(HERE, "renpy_apply.py"),
+r = subprocess.run([sys.executable, os.path.join(ENG, "renpy_apply.py"),
                     TUT, trf, "frenchtest"], capture_output=True, text=True,
                    encoding="utf-8", cwd=HERE)
 check("apply 退出码 0", r.returncode == 0, r.stderr[-300:])
@@ -88,16 +92,16 @@ check("生成块与官方块一致 ≥95%", len(gen_blocks) > 0 and same >= len(
       f"生成 {len(gen_blocks)} 一致 {same}")
 
 # ---------- 5. The Question 端到端 ----------
-r = subprocess.run([sys.executable, os.path.join(HERE, "renpy_extract.py"), TQ],
+r = subprocess.run([sys.executable, os.path.join(ENG, "renpy_extract.py"), TQ],
                    capture_output=True, text=True, encoding="utf-8", cwd=HERE)
 check("the_question 提取", r.returncode == 0 and "提取唯一文本" in r.stdout, r.stdout[-200:])
-out = os.path.join(HERE, "the_question_extracted.json")
+out = os.path.join(ROOT, "the_question_extracted.json")
 ext = json.load(open(out, encoding="utf-8"))
 check("the_question 条目 > 100", len(ext) > 100, str(len(ext)))
 tr2 = {k: "【译】" + k[:12] for k in ext}
 trf2 = os.path.join(HERE, "_tq_mock.json")
 json.dump(tr2, open(trf2, "w", encoding="utf-8"), ensure_ascii=False)
-r = subprocess.run([sys.executable, os.path.join(HERE, "renpy_apply.py"),
+r = subprocess.run([sys.executable, os.path.join(ENG, "renpy_apply.py"),
                     TQ, trf2, "chinese"], capture_output=True, text=True,
                    encoding="utf-8", cwd=HERE)
 check("the_question apply", r.returncode == 0, r.stderr[-200:])
@@ -111,7 +115,7 @@ check("非破坏性（tl 目录外无新文件）", os.path.exists(os.path.join(
 # 清理
 shutil.rmtree(os.path.join(TUT, "game/tl/frenchtest"), ignore_errors=True)
 shutil.rmtree(os.path.join(TQ, "game/tl/chinese"), ignore_errors=True)
-for f in (trf, trf2, out, os.path.join(HERE, "the_question_extracted.json")):
+for f in (trf, trf2, out, os.path.join(ROOT, "the_question_extracted.json")):
     if os.path.exists(f):
         os.remove(f)
 

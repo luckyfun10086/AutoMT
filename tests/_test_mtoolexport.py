@@ -9,6 +9,10 @@ import os, sys, io, json, subprocess, tempfile
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+ENG = os.path.join(ROOT, "engines")
+sys.path.insert(0, ROOT)
+sys.path.insert(0, ENG)
 sys.path.insert(0, HERE)
 from mtool_export import build
 
@@ -63,7 +67,7 @@ src = os.path.join(tmp, "game_extracted_translated.json")
 json.dump(tr, open(src, "w", encoding="utf-8"), ensure_ascii=False)
 gdir = os.path.join(tmp, "game")
 os.makedirs(gdir)
-r = subprocess.run([sys.executable, os.path.join(HERE, "mtool_export.py"), src,
+r = subprocess.run([sys.executable, os.path.join(ENG, "mtool_export.py"), src,
                     "--dir", gdir], capture_output=True, text=True,
                    encoding="utf-8", cwd=HERE)
 check("CLI 退出码 0", r.returncode == 0, r.stderr[-200:])

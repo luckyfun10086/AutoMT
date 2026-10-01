@@ -14,6 +14,10 @@ RPG Maker MV/MZ 独立文本提取器（无需 MTool）
 用法：
     python rpg_extract.py <游戏目录>        # 输出 game.extracted.json
 """
+import os, sys
+_ENG = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_ENG))    # 项目根：mt_config 等
+sys.path.insert(0, _ENG)                     # 引擎同目录：krkr_xp3 等
 import json, sys, io, os, glob
 import mt_config
 

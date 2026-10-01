@@ -13,6 +13,11 @@ Unity 独立文本提取器
     <游戏名>_extracted.json   {原文: ""}，接 OmniTrans 三步管线
     unity_manifest.json        位置清单（回写用，勿删）
 """
+import os, sys
+_ENG = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_ENG))    # 项目根：mt_config 等
+sys.path.insert(0, _ENG)                     # 引擎同目录：krkr_xp3 等
+
 import json, sys, io, os, re, glob
 import mt_config
 

@@ -13,6 +13,11 @@ SRPG Studio 独立回写器（桥接 Sinflower/SRPG-ToolBox）
 用法：
     python srpg_apply.py <游戏目录> <译文json>
 """
+import os, sys
+_ENG = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_ENG))    # 项目根：mt_config 等
+sys.path.insert(0, _ENG)                     # 引擎同目录：krkr_xp3 等
+
 import json, sys, io, os, re, subprocess, shutil
 import mt_config
 from srpg_extract import ensure_unpacker, run, JP, SKIP_KEYS

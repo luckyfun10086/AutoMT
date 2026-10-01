@@ -5,8 +5,9 @@ import io, sys, os, re, shutil, importlib.util
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import UnityPy
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def load(name):
-    spec = importlib.util.spec_from_file_location(name, os.path.join(os.path.dirname(__file__), f"{name}.py"))
+    spec = importlib.util.spec_from_file_location(name, os.path.join(ROOT, "engines", f"{name}.py"))
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m

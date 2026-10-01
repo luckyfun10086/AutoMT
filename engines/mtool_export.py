@@ -18,7 +18,9 @@ MTool 兼容导出
 """
 import os, sys, io, json, re, argparse
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_ENG = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_ENG))    # 项目根：mt_config 等
+sys.path.insert(0, _ENG)                     # 引擎同目录：krkr_xp3 等
 import mt_config
 
 # RPG 系控制码：\C[n] \c[27] \V[1] \N[4] \I[9] \fs[20] \fb[..] 等 + 停顿/速度码

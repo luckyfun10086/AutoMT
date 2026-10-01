@@ -1791,7 +1791,7 @@ class App:
             messagebox.showinfo("Info", self.T("g_mtool_no"))
             return
         trfile = cands[0]
-        args = [sys.executable, os.path.join(base, "mtool_export.py"), trfile]
+        args = [sys.executable, self._resolve_script("engines/mtool_export.py"), trfile]
         if self.game_path and os.path.isdir(self.game_path):
             args += ["--dir", self.game_path]
         else:

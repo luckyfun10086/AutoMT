@@ -22,6 +22,10 @@
   不改动原档案，生成 patch 封包（Kirikiri 按文件名序后挂载者覆盖先者）——
   卸载汉化只需删除 patch 文件，原游戏零风险。
 """
+import os, sys
+_ENG = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_ENG))    # 项目根：mt_config 等
+sys.path.insert(0, _ENG)                     # 引擎同目录：krkr_xp3 等
 import os, struct, zlib
 
 MAGIC = b"XP3\r\n \n\x1a\x8b\x67\x01"

@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
 """自动人名识别 + 全流程测试"""
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "engines"))
+
 import io, sys, json, threading, os, tempfile, shutil
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import mt_config, mt_gui

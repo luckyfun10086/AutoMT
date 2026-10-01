@@ -70,15 +70,19 @@ anytime — progress is resumable.
 > the `--add-data` entries):
 ```
 pip install pyinstaller
-pyinstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2 \
-  --collect-all sv_ttk \
-  --add-data "rpg_extract.py;." --add-data "rpg_apply.py;." \
-  --add-data "rva_extract.py;." --add-data "rva_apply.py;." --add-data "rvdata.py;." \
-  --add-data "srpg_extract.py;." --add-data "srpg_apply.py;." \
-  --add-data "krkr_extract.py;." --add-data "krkr_apply.py;." --add-data "krkr_xp3.py;." \
-  --add-data "renpy_extract.py;." --add-data "renpy_apply.py;." --add-data "renpy_rpyc.py;." \
-  --add-data "tyrano_extract.py;." --add-data "tyrano_apply.py;." \
-  --add-data "unity_extract.py;." --add-data "unity_apply.py;." mt_gui.py
+pyinstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2 
+  --collect-all sv_ttk 
+  --add-data "engines/rpg_extract.py;engines/" --add-data "engines/rpg_apply.py;engines/" 
+  --add-data "engines/rva_extract.py;engines/" --add-data "engines/rva_apply.py;engines/" 
+  --add-data "engines/rvdata.py;engines/" 
+  --add-data "engines/srpg_extract.py;engines/" --add-data "engines/srpg_apply.py;engines/" 
+  --add-data "engines/krkr_extract.py;engines/" --add-data "engines/krkr_apply.py;engines/" 
+  --add-data "engines/krkr_xp3.py;engines/" 
+  --add-data "engines/renpy_extract.py;engines/" --add-data "engines/renpy_apply.py;engines/" 
+  --add-data "engines/renpy_rpyc.py;engines/" 
+  --add-data "engines/tyrano_extract.py;engines/" --add-data "engines/tyrano_apply.py;engines/" 
+  --add-data "engines/unity_extract.py;engines/" --add-data "engines/unity_apply.py;engines/" 
+  --add-data "engines/mtool_export.py;engines/" mt_gui.py
 ```
 
 Output: `yourfile_translated.json` next to the input — keys are exact original strings,
@@ -203,11 +207,11 @@ MV/MZ store all game text as plain JSON (`Map*.json`, `CommonEvents.json`,
 required.
 
 ```
-python rpg_extract.py <game-folder>     # → game.extracted.json
+python engines/rpg_extract.py <game-folder>     # → game.extracted.json
 python mt_clean.py game.extracted.json  # ① mask
 python mt_translate.py                  # ② translate (resumable)
 python mt_apply.py game.extracted.json  # ③ restore → game.extracted_translated.json
-python rpg_apply.py <game-folder> game.extracted_translated.json   # write back
+python engines/rpg_apply.py <game-folder> game.extracted_translated.json   # write back
 ```
 
 What gets extracted: dialogue (code 401, consecutive lines merged into one block for
@@ -226,9 +230,9 @@ verified against hand-crafted ground-truth byte vectors, 300 random-tree fuzz
 cases, and bidirectional cross-validation against the `rubymarshal` library.
 
 ```
-python rva_extract.py <game-folder>     # dialogue/choices/rename/map names/skill & item text
+python engines/rva_extract.py <game-folder>     # dialogue/choices/rename/map names/skill & item text
 python mt_clean.py <game>_extracted.json && python mt_translate.py && python mt_apply.py <game>_extracted.json
-python rva_apply.py <game-folder> <game>_extracted_translated.json
+python engines/rva_apply.py <game-folder> <game>_extracted_translated.json
 ```
 
 Safety: only exact-match blocks are replaced (line-count mismatch keeps the
@@ -247,9 +251,9 @@ line-by-line: text outside `[tags]`, skipping comments, labels, `@` commands
 and embedded TJS (`iscript`/`macro`) blocks.
 
 ```
-python krkr_extract.py <game-folder>    # → <game>_extracted.json (e.g. 44,296 segments from a real game)
+python engines/krkr_extract.py <game-folder>    # → <game>_extracted.json (e.g. 44,296 segments from a real game)
 python mt_clean.py <game>_extracted.json && python mt_translate.py && python mt_apply.py <game>_extracted.json
-python krkr_apply.py <game-folder> <game>_extracted_translated.json
+python engines/krkr_apply.py <game-folder> <game>_extracted_translated.json
 ```
 
 Write-back is **non-destructive**: only the modified `.ks` files are packed into
@@ -266,9 +270,9 @@ Dialogue comes from `TranslateSay`/`Say` nodes **with the engine's own
 translation identifiers**; menu choices and `_()` strings are collected too.
 
 ```
-python renpy_extract.py <game-folder>   # → <game>_extracted.json
+python engines/renpy_extract.py <game-folder>   # → <game>_extracted.json
 python mt_clean.py <game>_extracted.json && python mt_translate.py && python mt_apply.py <game>_extracted.json
-python renpy_apply.py <game-folder> <game>_extracted_translated.json [language]
+python engines/renpy_apply.py <game-folder> <game>_extracted_translated.json [language]
 ```
 
 `renpy_apply.py` generates an **official translation package** in
@@ -285,9 +289,9 @@ to the official ones.
 ### TyranoScript games
 
 ```
-python tyrano_extract.py <game-folder>  # data/scenario/*.ks + character names from system json
+python engines/tyrano_extract.py <game-folder>  # data/scenario/*.ks + character names from system json
 python mt_clean.py <game>_extracted.json && python mt_translate.py && python mt_apply.py <game>_extracted.json
-python tyrano_apply.py <game-folder> <game>_extracted_translated.json
+python engines/tyrano_apply.py <game-folder> <game>_extracted_translated.json
 ```
 
 Text segments outside `[tags]` are extracted (comments/labels/speaker
@@ -298,11 +302,11 @@ back with exact in-line replacement; each original file is backed up as
 ### SRPG Studio games
 
 ```
-python srpg_extract.py <game-folder>   # auto: download tool → unpack → patch → collect
+python engines/srpg_extract.py <game-folder>   # auto: download tool → unpack → patch → collect
 python mt_clean.py <game>_extracted.json
 python mt_translate.py                 # MT or AI (set MT_API_TYPE=openai + model in .env)
 python mt_apply.py <game>_extracted.json
-python srpg_apply.py <game-folder> <game>_extracted_translated.json
+python engines/srpg_apply.py <game-folder> <game>_extracted_translated.json
 ```
 
 Safety: original `data.dts` is backed up to `.automt.bak`; messages are re-chunked on
@@ -316,9 +320,9 @@ to confirm).
 
 ```
 pip install UnityPy                       # only for CLI use; the GUI installs it on demand
-python unity_extract.py <game-folder>     # scan assets/levels/bundles → strings + manifest
+python engines/unity_extract.py <game-folder>     # scan assets/levels/bundles → strings + manifest
 python mt_clean.py <game>_extracted.json && python mt_translate.py && python mt_apply.py <game>_extracted.json
-python unity_apply.py <game-folder> <game>_extracted_translated.json
+python engines/unity_apply.py <game-folder> <game>_extracted_translated.json
 ```
 
 Covers: TextAssets (JSON scenario files parsed value-by-value), strings embedded in
@@ -348,7 +352,7 @@ leading-control-code-stripped, and all-codes-stripped forms. Extra keys are
 harmless (MTool falls back to the original text for unmatched keys).
 
 ```
-python mtool_export.py <game>_extracted_translated.json --dir <game-folder>
+python engines/mtool_export.py <game>_extracted_translated.json --dir <game-folder>
 ```
 
 The GUI's Game tab has an **📤 Export for MTool** button doing the same.
@@ -411,20 +415,22 @@ the guided Game Localization tab: ① engine detected → ② Extract text → �
 pipeline steps on `<game>_extracted.json`, then `<engine>_apply.py` — see the
 per-engine sections above.
 
-## Files
+## Project layout
 
-- `mt_gui.py` — GUI with three functional tabs (also the PyInstaller entry point)
-- `mt_clean.py` / `mt_translate.py` / `mt_apply.py` — the three CLI stages
-- `mt_config.py` — config layer (.env I/O, URL building, response parsing, name detection, engine registry)
-- `rpg_extract.py` / `rpg_apply.py` — RPG Maker MV/MZ extraction & write-back
-- `rvdata.py` + `rva_extract.py` / `rva_apply.py` — Ruby Marshal codec & VX Ace/VX/XP pipeline
-- `krkr_xp3.py` + `krkr_extract.py` / `krkr_apply.py` — XP3 archive codec & Kirikiri pipeline
-- `renpy_rpyc.py` + `renpy_extract.py` / `renpy_apply.py` — rpyc/rpa reader & Ren'Py tl packages
-- `tyrano_extract.py` / `tyrano_apply.py` — TyranoScript pipeline
-- `names.example.txt` — names.txt template
-- `_test_custom.py` / `_test_autonames.py` / `_test_rpg.py` / `_test_rva.py` /
-  `_test_rva_pipeline.py` / `_test_krkr.py` / `_test_renpy.py` / `_test_tyrano.py` —
-  self-tests (mock API, name detection, per-engine extract/apply round-trips)
+```
+mt_gui.py            GUI entry point (PyInstaller target)
+mt_clean.py          CLI stage 1: clean & mask
+mt_translate.py      CLI stage 2: translate (batched)
+mt_apply.py          CLI stage 3: restore & validate
+mt_config.py         config layer (.env, URLs, name detection, engine registry)
+engines/             one extractor/applier pair per engine + binary codecs
+  rpg_*.py           RPG Maker MV/MZ          rvdata/rva_*.py   VX Ace/VX/XP (Ruby Marshal)
+  krkr_*.py          Kirikiri (.xp3)          renpy_*.py        Ren'Py (rpyc/rpa + tl)
+  tyrano_*.py        TyranoScript             srpg_*.py         SRPG Studio
+  unity_*.py         Unity                     mtool_export.py   MTool-compatible export
+tests/               11 self-test suites (run from anywhere)
+names.example.txt    names.txt template
+```
 
 ## License
 

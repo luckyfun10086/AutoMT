@@ -11,6 +11,10 @@ import json, sys, io, os, shutil, tempfile, subprocess
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+ENG = os.path.join(ROOT, "engines")
+sys.path.insert(0, ROOT)
+sys.path.insert(0, ENG)
 sys.path.insert(0, HERE)
 import rvdata as R
 
@@ -93,7 +97,7 @@ orig_bytes = {f: open(os.path.join(data, f), "rb").read()
               for f in os.listdir(data)}
 
 # ---------------- 提取 ----------------
-r = subprocess.run([sys.executable, os.path.join(HERE, "rva_extract.py"), game],
+r = subprocess.run([sys.executable, os.path.join(ENG, "rva_extract.py"), game],
                    capture_output=True, text=True, encoding="utf-8", cwd=HERE)
 print(r.stdout.strip())
 check("提取退出码 0", r.returncode == 0, r.stderr[-300:])
@@ -119,7 +123,7 @@ trf = dst.replace("_extracted.json", "_translated.json")
 json.dump(tr, open(trf, "w", encoding="utf-8"), ensure_ascii=False)
 
 # ---------------- 回写 ----------------
-r = subprocess.run([sys.executable, os.path.join(HERE, "rva_apply.py"), game, trf],
+r = subprocess.run([sys.executable, os.path.join(ENG, "rva_apply.py"), game, trf],
                    capture_output=True, text=True, encoding="utf-8", cwd=HERE)
 print(r.stdout.strip())
 check("回写退出码 0", r.returncode == 0, r.stderr[-300:])
@@ -173,7 +177,7 @@ shutil.rmtree(game, ignore_errors=True)
 for f in (dst, trf):
     if f and os.path.exists(f):
         os.remove(f)
-mtw = os.path.join(HERE, "mt_work")
+mtw = os.path.join(ROOT, "mt_work")
 if os.path.isdir(mtw):
     shutil.rmtree(mtw, ignore_errors=True)
 

@@ -107,15 +107,19 @@ AI 模式**一次请求批量翻 24 条**（带 id 对齐的 JSON、等长校验
 > 重新打包（引擎脚本以数据文件形式打入 exe，`--add-data` 各项不可省略）：
 ```
 pip install pyinstaller
-pyinstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2 \
-  --collect-all sv_ttk \
-  --add-data "rpg_extract.py;." --add-data "rpg_apply.py;." \
-  --add-data "rva_extract.py;." --add-data "rva_apply.py;." --add-data "rvdata.py;." \
-  --add-data "srpg_extract.py;." --add-data "srpg_apply.py;." \
-  --add-data "krkr_extract.py;." --add-data "krkr_apply.py;." --add-data "krkr_xp3.py;." \
-  --add-data "renpy_extract.py;." --add-data "renpy_apply.py;." --add-data "renpy_rpyc.py;." \
-  --add-data "tyrano_extract.py;." --add-data "tyrano_apply.py;." \
-  --add-data "unity_extract.py;." --add-data "unity_apply.py;." mt_gui.py
+pyinstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2 
+  --collect-all sv_ttk 
+  --add-data "engines/rpg_extract.py;engines/" --add-data "engines/rpg_apply.py;engines/" 
+  --add-data "engines/rva_extract.py;engines/" --add-data "engines/rva_apply.py;engines/" 
+  --add-data "engines/rvdata.py;engines/" 
+  --add-data "engines/srpg_extract.py;engines/" --add-data "engines/srpg_apply.py;engines/" 
+  --add-data "engines/krkr_extract.py;engines/" --add-data "engines/krkr_apply.py;engines/" 
+  --add-data "engines/krkr_xp3.py;engines/" 
+  --add-data "engines/renpy_extract.py;engines/" --add-data "engines/renpy_apply.py;engines/" 
+  --add-data "engines/renpy_rpyc.py;engines/" 
+  --add-data "engines/tyrano_extract.py;engines/" --add-data "engines/tyrano_apply.py;engines/" 
+  --add-data "engines/unity_extract.py;engines/" --add-data "engines/unity_apply.py;engines/" 
+  --add-data "engines/mtool_export.py;engines/" mt_gui.py
 ```
 
 输出：输入文件同目录 `xxx_translated.json`（键=英文原文精确匹配，MTool 可直接用）。
@@ -172,11 +176,11 @@ MV/MZ 的全部游戏文本都是明文 JSON（`Map*.json`、`CommonEvents.json`
 `Troops.json` 等），OmniTrans 直接读写，全程无需第三方工具。
 
 ```
-python rpg_extract.py <游戏目录>      # → game.extracted.json
+python engines/rpg_extract.py <游戏目录>      # → game.extracted.json
 python mt_clean.py game.extracted.json  # ① 掩码
 python mt_translate.py                  # ② 机翻（断点可续）
 python mt_apply.py game.extracted.json  # ③ 还原 → game.extracted_translated.json
-python rpg_apply.py <游戏目录> game.extracted_translated.json   # 回写游戏
+python engines/rpg_apply.py <游戏目录> game.extracted_translated.json   # 回写游戏
 ```
 
 提取范围：对话（401，连续行自动合并成整段，翻译质量更好）、滚动文本（405）、
@@ -193,9 +197,9 @@ Marshal 编解码器（`rvdata.py`），读写**字节级还原**——经手工
 300 轮随机树模糊测试、与 `rubymarshal` 库的双向交叉验证。
 
 ```
-python rva_extract.py <游戏目录>     # 对话/选项/改名/地图名/技能·物品文本
+python engines/rva_extract.py <游戏目录>     # 对话/选项/改名/地图名/技能·物品文本
 python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && python mt_apply.py <游戏名>_extracted.json
-python rva_apply.py <游戏目录> <游戏名>_extracted_translated.json
+python engines/rva_apply.py <游戏目录> <游戏名>_extracted_translated.json
 ```
 
 安全机制：只替换完全匹配的文本块（行数不齐保持原文）；`Scripts`/`System` 永不触碰；
@@ -210,9 +214,9 @@ KAG `.ks` 剧本（CP932 / UTF-16LE / UTF-8）逐行提取：`[标签]` 外文�
 标签行、`@` 命令与内嵌 TJS（`iscript`/`macro`）块。
 
 ```
-python krkr_extract.py <游戏目录>    # → <游戏名>_extracted.json（真实游戏 44,296 段实测）
+python engines/krkr_extract.py <游戏目录>    # → <游戏名>_extracted.json（真实游戏 44,296 段实测）
 python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && python mt_apply.py <游戏名>_extracted.json
-python krkr_apply.py <游戏目录> <游戏名>_extracted_translated.json
+python engines/krkr_apply.py <游戏目录> <游戏名>_extracted_translated.json
 ```
 
 回写**非破坏**：只有改动的 `.ks` 打成 `patch_zz_omnitrans.xp3`（最后挂载、覆盖原文件），
@@ -226,9 +230,9 @@ python krkr_apply.py <游戏目录> <游戏名>_extracted_translated.json
 翻译标识符**），菜单选项与 `_()` 界面字符串一并收集。
 
 ```
-python renpy_extract.py <游戏目录>   # → <游戏名>_extracted.json
+python engines/renpy_extract.py <游戏目录>   # → <游戏名>_extracted.json
 python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && python mt_apply.py <游戏名>_extracted.json
-python renpy_apply.py <游戏目录> <游戏名>_extracted_translated.json [语言名]
+python engines/renpy_apply.py <游戏目录> <游戏名>_extracted_translated.json [语言名]
 ```
 
 `renpy_apply.py` 生成**官方格式翻译包** `game/tl/<语言>/omnitrans_script.rpy`（默认语言
@@ -242,9 +246,9 @@ python renpy_apply.py <游戏目录> <游戏名>_extracted_translated.json [语�
 ### TyranoScript 游戏
 
 ```
-python tyrano_extract.py <游戏目录>  # data/scenario/*.ks + 系统 json 角色名
+python engines/tyrano_extract.py <游戏目录>  # data/scenario/*.ks + 系统 json 角色名
 python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && python mt_apply.py <游戏名>_extracted.json
-python tyrano_apply.py <游戏目录> <游戏名>_extracted_translated.json
+python engines/tyrano_apply.py <游戏目录> <游戏名>_extracted_translated.json
 ```
 
 提取 `[标签]` 外文本段（跳过注释/标签行/说话人行/macro·eval 块，`[link]` 选项文本
@@ -253,11 +257,11 @@ python tyrano_apply.py <游戏目录> <游戏名>_extracted_translated.json
 ### SRPG Studio 游戏专用流程
 
 ```
-python srpg_extract.py <游戏目录>      # 自动：下载工具→解包→生成补丁→收集文本
+python engines/srpg_extract.py <游戏目录>      # 自动：下载工具→解包→生成补丁→收集文本
 python mt_clean.py <游戏名>_extracted.json
 python mt_translate.py                # 机翻或 AI（.env 配 MT_API_TYPE=openai+模型）
 python mt_apply.py <游戏名>_extracted.json
-python srpg_apply.py <游戏目录> <游戏名>_extracted_translated.json
+python engines/srpg_apply.py <游戏目录> <游戏名>_extracted_translated.json
 ```
 
 安全机制：原 `data.dts` 自动备份为 `.automt.bak`；消息按原始行边界切回，行数不齐
@@ -268,9 +272,9 @@ python srpg_apply.py <游戏目录> <游戏名>_extracted_translated.json
 
 ```
 pip install UnityPy                        # 仅 CLI 需要；GUI 首次使用会自动弹窗安装
-python unity_extract.py <游戏目录>      # 扫描 assets/level/bundle → 收集文本+位置清单
+python engines/unity_extract.py <游戏目录>      # 扫描 assets/level/bundle → 收集文本+位置清单
 python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && python mt_apply.py <游戏名>_extracted.json
-python unity_apply.py <游戏目录> <游戏名>_extracted_translated.json
+python engines/unity_apply.py <游戏目录> <游戏名>_extracted_translated.json
 ```
 
 提取范围：TextAsset（自动识别 JSON 剧本按值提取）、MonoBehaviour 内嵌字符串
@@ -294,7 +298,7 @@ python unity_apply.py <游戏目录> <游戏名>_extracted_translated.json
 多出的键无害（MTool 对未命中的键回落显示原文）。
 
 ```
-python mtool_export.py <游戏名>_extracted_translated.json --dir <游戏目录>
+python engines/mtool_export.py <游戏名>_extracted_translated.json --dir <游戏目录>
 ```
 
 GUI 游戏页有 **📤 导出 MTool 用 json** 按钮做同样的事。对照真实 MTool 导出
@@ -351,20 +355,22 @@ python mt_apply.py [文件]   ③ 还原回填：校验+清理 → 输出 transl
 **任意引擎（命令行）**：先跑该引擎的 `<引擎>_extract.py`，对 `<游戏名>_extracted.json`
 走同样三步，再跑 `<引擎>_apply.py` —— 各引擎细节见上方分节。
 
-## 文件说明
+## 项目结构
 
-- `mt_gui.py` — 上位机（三大功能分区标签页，兼 PyInstaller 打包入口）
-- `mt_clean.py / mt_translate.py / mt_apply.py` — 命令行三步
-- `mt_config.py` — 配置层（.env 读写/URL构建/响应解析/人名识别/引擎注册表）
-- `rpg_extract.py / rpg_apply.py` — RPG Maker MV/MZ 独立提取与回写
-- `rvdata.py` + `rva_extract.py / rva_apply.py` — Ruby Marshal 编解码器 + VX Ace/VX/XP 管线
-- `krkr_xp3.py` + `krkr_extract.py / krkr_apply.py` — XP3 封包编解码 + Kirikiri 管线
-- `renpy_rpyc.py` + `renpy_extract.py / renpy_apply.py` — rpyc/rpa 读取器 + Ren'Py tl 翻译包
-- `tyrano_extract.py / tyrano_apply.py` — TyranoScript 管线
-- `names.example.txt` — 人名表模板
-- `_test_custom.py / _test_autonames.py / _test_rpg.py / _test_rva.py /
-  _test_rva_pipeline.py / _test_krkr.py / _test_renpy.py / _test_tyrano.py` —
-  自测（模拟API、四语言识别、各引擎提取回写全链路）
+```
+mt_gui.py            上位机入口（PyInstaller 打包目标）
+mt_clean.py          命令行① 清洗掩码
+mt_translate.py      命令行② 机翻执行（批量）
+mt_apply.py          命令行③ 还原回填
+mt_config.py         配置层（.env/URL 构建/人名识别/引擎注册表）
+engines/             各引擎提取/回写 + 二进制编解码
+  rpg_*.py           RPG Maker MV/MZ          rvdata/rva_*.py   VX Ace/VX/XP（Ruby Marshal）
+  krkr_*.py          Kirikiri（.xp3）          renpy_*.py        Ren'Py（rpyc/rpa + tl）
+  tyrano_*.py        TyranoScript             srpg_*.py         SRPG Studio
+  unity_*.py         Unity                     mtool_export.py   MTool 兼容导出
+tests/               11 套自测（任意目录可跑）
+names.example.txt    人名表模板
+```
 
 ## 许可证
 

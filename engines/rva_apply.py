@@ -16,7 +16,9 @@ RPG Maker VX Ace / VX / XP 独立回写器（无需 MTool）
 """
 import json, sys, io, os, glob, shutil
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_ENG = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_ENG))    # 项目根：mt_config 等
+sys.path.insert(0, _ENG)                     # 引擎同目录：krkr_xp3 等
 import rvdata as R
 from rva_extract import find_data_dir, cmd_code, cmd_params
 

@@ -6,6 +6,10 @@ import json, sys, io, os, shutil, tempfile, subprocess
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+ENG = os.path.join(ROOT, "engines")
+sys.path.insert(0, ROOT)
+sys.path.insert(0, ENG)
 
 FAILS = []
 
@@ -39,12 +43,12 @@ os.makedirs(os.path.join(game, "data", "system"), exist_ok=True)
 json.dump({"charas": [{"name": "akari", "jname": "あかり"}]},
           open(os.path.join(game, "data", "system", "chara.json"), "w", encoding="utf-8"))
 
-r = subprocess.run([sys.executable, os.path.join(HERE, "tyrano_extract.py"), game],
+r = subprocess.run([sys.executable, os.path.join(ENG, "tyrano_extract.py"), game],
                    capture_output=True, text=True, encoding="utf-8", cwd=HERE)
 print(r.stdout.strip())
 check("提取退出码 0", r.returncode == 0, r.stderr[-300:])
 import glob
-dst = glob.glob(os.path.join(HERE, "tyrano_game_*_extracted.json"))[0]
+dst = glob.glob(os.path.join(ROOT, "tyrano_game_*_extracted.json"))[0]
 ext = json.load(open(dst, encoding="utf-8"))
 expect = {"今日はいい天気ですね。", "はい、そうです。", "選択して下さい：",
           "はい", "タグと", "テキストの混在行", "あかり"}
@@ -54,7 +58,7 @@ check("提取集合", set(ext.keys()) == expect, sorted(ext.keys()))
 tr = {k: "【译】" + k for k in ext}
 trf = os.path.join(HERE, "tyrano_mock.json")
 json.dump(tr, open(trf, "w", encoding="utf-8"), ensure_ascii=False)
-r = subprocess.run([sys.executable, os.path.join(HERE, "tyrano_apply.py"), game, trf],
+r = subprocess.run([sys.executable, os.path.join(ENG, "tyrano_apply.py"), game, trf],
                    capture_output=True, text=True, encoding="utf-8", cwd=HERE)
 print(r.stdout.strip())
 check("回写退出码 0", r.returncode == 0, r.stderr[-300:])

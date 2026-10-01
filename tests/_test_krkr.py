@@ -10,6 +10,10 @@ import json, sys, io, os, shutil, tempfile, subprocess
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+ENG = os.path.join(ROOT, "engines")
+sys.path.insert(0, ROOT)
+sys.path.insert(0, ENG)
 sys.path.insert(0, HERE)
 import krkr_xp3 as X
 from krkr_extract import (decode_ks, encode_ks, kag_text_segments, translatable,
@@ -103,7 +107,7 @@ check("端到端提取", len(ex) > 0, f"{len(ex)}")
 trf = os.path.join(game, "tr.json")
 json.dump({k: "【译】" + k for k in ex}, open(trf, "w", encoding="utf-8"), ensure_ascii=False)
 
-r = subprocess.run([sys.executable, os.path.join(HERE, "krkr_apply.py"), game, trf],
+r = subprocess.run([sys.executable, os.path.join(ENG, "krkr_apply.py"), game, trf],
                    capture_output=True, text=True, encoding="utf-8", cwd=HERE)
 check("apply 退出码 0", r.returncode == 0, r.stderr[-300:])
 pn = os.path.join(game, patch_name(game))

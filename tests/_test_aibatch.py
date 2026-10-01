@@ -10,7 +10,9 @@
 import io, sys, json, threading, os, tempfile, shutil, http.server, time
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, 'engines'))
 import mt_gui, mt_config
 
 FAILS = []

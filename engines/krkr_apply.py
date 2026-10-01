@@ -15,7 +15,9 @@ Kirikiri (吉里吉里) 回写器 — 生成非破坏性 patch 封包
 """
 import json, sys, io, os, glob, time
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_ENG = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_ENG))    # 项目根：mt_config 等
+sys.path.insert(0, _ENG)                     # 引擎同目录：krkr_xp3 等
 import krkr_xp3 as X
 from krkr_extract import (decode_ks, encode_ks, kag_text_segments, translatable,
                           effective_files)
