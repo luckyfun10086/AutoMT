@@ -91,6 +91,15 @@ S = {
         "g_engine_table": "引擎支持总览",
         "g_col_engine": "引擎 Engine",
         "g_col_status": "支持状态",
+        # ---- 背景图 ----
+        "bg_label": "背景图片:", "bg_pick": "选择图片…", "bg_clear": "清除",
+        "bg_none": "（未设置；设置后显示在「快速翻译」页投放卡）",
+        "bg_hint": "PNG/JPG，自动裁切铺满投放卡；需 Pillow（缺失时自动提示安装）",
+        "bg_title": "选择背景图片",
+        "bg_pillow_q": ("背景图片功能需要 Pillow 库（当前未检测到）。\n\n"
+                        "是否自动安装？（需要 Python 和 pip）\n"
+                        "Background images require Pillow (not found). Install automatically?"),
+        "bg_pillow_fail": "Pillow 安装失败",
     },
     "en": {
         "title": "OmniTrans — One-click Game Translator",
@@ -151,6 +160,14 @@ S = {
         "g_engine_table": "Engine support overview",
         "g_col_engine": "Engine",
         "g_col_status": "Status",
+        # ---- Background image ----
+        "bg_label": "Background:", "bg_pick": "Choose image…", "bg_clear": "Clear",
+        "bg_none": "(not set — shown on the Quick Translate drop card)",
+        "bg_hint": "PNG/JPG, cover-cropped onto the drop card; needs Pillow (auto-install prompt if missing)",
+        "bg_title": "Choose a background image",
+        "bg_pillow_q": ("Background images require the Pillow library (not found).\n\n"
+                        "Install automatically? (requires Python & pip)"),
+        "bg_pillow_fail": "Pillow installation failed",
     },
 }
 
@@ -538,6 +555,9 @@ class App:
         if self.theme not in ("dark", "light"):
             self.theme = "light"
         self.pal = DARK if self.theme == "dark" else LIGHT
+        self.bg_path = env.get("MT_BG", "")
+        self._drop_note = ""
+        self._bg_after = None
         self._apply_theme()
         self._build()
         self._apply_widget_colors()
@@ -595,8 +615,12 @@ class App:
             if w is None:
                 continue
             if attr == "drop":
-                w.config(bg=pal["drop_bg"], fg=pal["drop_fg"],
-                         highlightbackground=pal["drop_border"])
+                if isinstance(w, tk.Canvas):
+                    w.config(bg=pal["drop_bg"], highlightbackground=pal["drop_border"])
+                    self._render_drop_image()
+                else:
+                    w.config(bg=pal["drop_bg"], fg=pal["drop_fg"],
+                             highlightbackground=pal["drop_border"])
             elif attr in ("lang_btn", "theme_btn"):
                 w.config(bg=pal["btn_bg"], fg=pal["btn_fg"],
                          activebackground=pal["btn_active"])
@@ -612,6 +636,125 @@ class App:
         self._apply_theme()
         self._apply_widget_colors()
         self.theme_btn.config(text="☀" if self.theme == "dark" else "🌙")
+
+    # ---------------- 投放卡（普通 Label / 背景图 Canvas） ----------------
+    def _build_drop_card(self, parent):
+        """构建投放卡：设置了背景图且 Pillow 可用时用 Canvas 绘制图片+蒙层+文字，
+        否则普通 Label。重复调用时先销毁旧卡。"""
+        if getattr(self, "drop", None) is not None:
+            self.drop.destroy()
+        use_img = bool(self.bg_path) and mt_config.check_pillow()
+        if use_img:
+            self.drop = tk.Canvas(parent, height=220, highlightthickness=2,
+                                  highlightbackground=self.pal["drop_border"],
+                                  bg=self.pal["drop_bg"], cursor="hand2")
+            self.drop.pack(fill="x", pady=4)
+            self.drop.bind("<Configure>", self._on_drop_resize)
+            self._render_drop_image()
+        else:
+            drop_text = self.T("drop") + (self.T("drop_nodnd") if not HAS_DND else "")
+            self.drop = tk.Label(parent, text=drop_text, relief="flat",
+                                 bg=self.pal["drop_bg"], fg=self.pal["drop_fg"],
+                                 padx=16, pady=26,
+                                 font=("Microsoft YaHei UI", 12), cursor="hand2",
+                                 highlightthickness=2,
+                                 highlightbackground=self.pal["drop_border"])
+            self.drop.pack(fill="x", pady=4)
+        self.drop.bind("<Button-1>", lambda e: self.pick())
+        self.drop.bind("<Enter>", lambda e: self.drop.config(
+            highlightbackground=self.pal["accent"]))
+        self.drop.bind("<Leave>", lambda e: self.drop.config(
+            highlightbackground=self.pal["drop_border"]))
+        if self._drop_note:
+            self._set_drop_note(self._drop_note)
+
+    def _on_drop_resize(self, event):
+        """投放卡尺寸变化 → 防抖 150ms 重绘背景图"""
+        if not isinstance(self.drop, tk.Canvas):
+            return
+        if getattr(self, "_bg_after", None):
+            self.root.after_cancel(self._bg_after)
+        self._bg_after = self.root.after(150, self._render_drop_image)
+
+    def _render_drop_image(self):
+        """把 MT_BG 图片 cover-fit 绘制到投放 Canvas + 蒙层 + 提示文字"""
+        self._bg_after = None
+        cv = self.drop
+        if not isinstance(cv, tk.Canvas) or not self.bg_path:
+            return
+        try:
+            from PIL import Image, ImageTk
+            img = Image.open(self.bg_path)
+            img.load()
+        except Exception as e:
+            self.log(f"[bg] 背景图加载失败，回退普通卡片 / failed to load: {e}")
+            self.bg_path = ""
+            self._build_drop_card(self._t1)
+            return
+        w = max(cv.winfo_width(), 200)
+        h = max(cv.winfo_height() or 220, 120)
+        iw, ih = img.size
+        scale = max(w / iw, h / ih)
+        nw, nh = int(iw * scale) + 1, int(ih * scale) + 1
+        img = img.resize((nw, nh), Image.LANCZOS)
+        left, top = (nw - w) // 2, (nh - h) // 2
+        img = img.crop((left, top, left + w, top + h))
+        photo = ImageTk.PhotoImage(img)
+        cv.delete("all")
+        cv._bgphoto = photo                      # 防 GC
+        cv.create_image(0, 0, image=photo, anchor="nw")
+        cv.create_rectangle(0, 0, w, h, fill="#0b0e16", stipple="gray50",
+                            outline="")
+        main = self.T("drop").split("\n")[0]
+        sub = self.T("drop_nodnd").strip() if not HAS_DND else ""
+        cv.create_text(w // 2, h // 2 - 8, text=main, fill="#ffffff",
+                       font=("Microsoft YaHei UI", 13, "bold"), justify="center")
+        if sub:
+            cv.create_text(w // 2, h // 2 + 20, text=sub, fill="#cdd5e4",
+                           font=("Microsoft YaHei UI", 9), justify="center")
+        if self._drop_note:
+            cv.create_text(w // 2, h - 16, text=self._drop_note,
+                           fill="#8fe3b0", font=("Microsoft YaHei UI", 9))
+
+    def _set_drop_note(self, text):
+        """投放卡状态角标（完成/取消等）；Label 模式变色，Canvas 模式画底部小字"""
+        self._drop_note = text
+        if isinstance(self.drop, tk.Canvas):
+            self._render_drop_image()
+        else:
+            try:
+                self.drop.config(fg=text and self.pal["ok"] or self.pal["drop_fg"])
+            except tk.TclError:
+                pass
+
+    # ---------------- 背景图设置 ----------------
+    def bg_pick(self):
+        if not mt_config.check_pillow():
+            if not messagebox.askyesno("Pillow", self.T("bg_pillow_q")):
+                self.log("[bg] 用户取消安装 Pillow")
+                return
+            self.log("[bg] 正在安装 Pillow…")
+            ok, msg = mt_config.install_pillow()
+            if not ok:
+                messagebox.showerror(self.T("bg_pillow_fail"), msg)
+                return
+        p = filedialog.askopenfilename(title=self.T("bg_title"),
+                                       filetypes=[("Image", "*.png *.jpg *.jpeg *.webp *.bmp"),
+                                                  ("All files", "*.*")])
+        if not p:
+            return
+        self.bg_path = p
+        mt_config.save_env({"MT_BG": p})
+        self.bg_name_var.set(os.path.basename(p))
+        self._build_drop_card(self._t1)
+        self.log(f"[bg] 背景图已设置: {os.path.basename(p)}")
+
+    def bg_clear(self):
+        self.bg_path = ""
+        mt_config.save_env({"MT_BG": ""})     # 空值 = 删除该行
+        self.bg_name_var.set(self.T("bg_none"))
+        self._build_drop_card(self._t1)
+        self.log("[bg] 背景图已清除")
 
     def _build(self):
         self.root.title(self.T("title"))
@@ -672,17 +815,8 @@ class App:
         # ===== Tab1 快速翻译 =====
         t1 = ttk.Frame(self.nb, padding=4)
         self.nb.add(t1, text=self.T("tab_quick"))
-        drop_text = self.T("drop") + (self.T("drop_nodnd") if not HAS_DND else "")
-        self.drop = tk.Label(t1, text=drop_text, relief="flat",
-                             bg=self.pal["drop_bg"], fg=self.pal["drop_fg"], padx=16, pady=26,
-                             font=("Microsoft YaHei UI", 12), cursor="hand2",
-                             highlightthickness=2, highlightbackground=self.pal["drop_border"])
-        self.drop.pack(fill="x", pady=4)
-        self.drop.bind("<Button-1>", lambda e: self.pick())
-        self.drop.bind("<Enter>", lambda e: self.drop.config(
-            highlightbackground=self.pal["accent"]))
-        self.drop.bind("<Leave>", lambda e: self.drop.config(
-            highlightbackground=self.pal["drop_border"]))
+        self._t1 = t1
+        self._build_drop_card(t1)
 
         prog = ttk.Frame(t1, padding=(4, 2))
         prog.pack(fill="x")
@@ -808,6 +942,24 @@ class App:
         cfg.bind("<Configure>", lambda e: self.lbl_api_hint.configure(
             wraplength=max(320, e.width - 60)))
 
+        # ---- 背景图行 ----
+        bgrow = ttk.Frame(cfg, padding=(0, 8, 0, 0))
+        bgrow.grid(row=5, column=0, columnspan=6, sticky="w")
+        self.lbl_bg = ttk.Label(bgrow, text=self.T("bg_label"))
+        self.lbl_bg.pack(side="left")
+        self.bg_pick_btn = ttk.Button(bgrow, text=self.T("bg_pick"), command=self.bg_pick)
+        self.bg_pick_btn.pack(side="left", padx=(6, 4))
+        self.bg_clear_btn = ttk.Button(bgrow, text=self.T("bg_clear"), command=self.bg_clear)
+        self.bg_clear_btn.pack(side="left", padx=(0, 10))
+        self.bg_name_var = tk.StringVar(
+            value=os.path.basename(self.bg_path) if self.bg_path else self.T("bg_none"))
+        ttk.Label(bgrow, textvariable=self.bg_name_var, style="Hint.TLabel").pack(side="left")
+        self.lbl_bg_hint = ttk.Label(cfg, text=self.T("bg_hint"), style="Hint.TLabel",
+                                     wraplength=700, justify="left")
+        self.lbl_bg_hint.grid(row=6, column=0, columnspan=6, sticky="we", pady=(2, 4))
+        cfg.bind("<Configure>", lambda e: self.lbl_bg_hint.configure(
+            wraplength=max(320, e.width - 60)), add="+")
+
         env = mt_config.load_env()
         if env.get("MT_ENDPOINT"):
             self.url_var.set(env["MT_ENDPOINT"])
@@ -859,11 +1011,17 @@ class App:
                                       wraplength=700, justify="left")
         self.lbl_api_hint.grid(row=3, column=0, columnspan=6, sticky="we", pady=(4, 0))
         cfg.config(text=self.T("api_frame"))
-        self.drop.config(text=self.T("drop") + (self.T("drop_nodnd") if not HAS_DND else ""))
+        self._build_drop_card(self._t1)
         self.start_btn.config(text=self.T("start"))
         self.cancel_btn.config(text=self.T("cancel"))
         self.open_btn.config(text=self.T("open_out"))
         # 标签页与游戏汉化页文案
+        self.bg_pick_btn.config(text=self.T("bg_pick"))
+        self.bg_clear_btn.config(text=self.T("bg_clear"))
+        self.lbl_bg.config(text=self.T("bg_label"))
+        if not self.bg_path:
+            self.bg_name_var.set(self.T("bg_none"))
+        self.lbl_bg_hint.config(text=self.T("bg_hint"))
         self.nb.tab(0, text=self.T("tab_quick"))
         self.nb.tab(1, text=self.T("tab_game"))
         self.nb.tab(2, text=self.T("tab_cfg"))
@@ -1063,7 +1221,7 @@ class App:
         self.detail_var.set(p)
         self.start_btn.config(state="normal")
         self.open_btn.config(state="disabled")
-        self.drop.config(fg=self.pal["ok"])
+        self._set_drop_note("ok")
         self.log(f"[file] {p}")
 
     def start(self):
@@ -1090,7 +1248,7 @@ class App:
         self.cancel.clear()
         self.start_btn.config(state="disabled")
         self.cancel_btn.config(state="normal")
-        self.drop.config(fg=self.pal["muted"])
+        self._set_drop_note("")
         self.log(self.T("log_start").format(self.sl_var.get(), self.tl_var.get()))
         self.worker = threading.Thread(target=self._work, args=(pipe,), daemon=True)
         self.worker.start()
@@ -1255,7 +1413,7 @@ class App:
                     self.g_translate_btn.config(state="normal")
                     self.cancel_btn.config(state="disabled")
                     self.open_btn.config(state="normal")
-                    self.drop.config(fg=self.pal["ok"])
+                    self._set_drop_note("ok")
                     # 翻译完成 → 如果之前识别过游戏引擎，询问是否立即导入
                     if self.game_path and self.apply_script:
                         self.apply_btn.config(state="normal")
@@ -1276,7 +1434,7 @@ class App:
                                             self.T("msg_done_b").format(ok, drop, dst))
                 elif kind == "applied":
                     self.log(f"[applied] ✓ 翻译已导入游戏: {payload}")
-                    self.drop.config(fg=self.pal["ok"])
+                    self._set_drop_note("ok")
                     self.g_extract_btn.config(state="normal")
                     messagebox.showinfo(
                         "Applied / 已导入",

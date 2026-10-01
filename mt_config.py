@@ -21,7 +21,7 @@ DEFAULT_ENDPOINT = ("https://clients5.google.com/translate_a/t"
 
 ENV_KEYS = ("MT_ENDPOINT", "MT_API_KEY", "MT_API_HEADER", "MT_SL", "MT_TL",
             "MT_AUTO_NAMES", "MT_LANG", "MT_API_TYPE", "MT_MODEL", "MT_FALLBACK",
-            "MT_THEME")
+            "MT_THEME", "MT_BG")
 
 class ApiError(Exception):
     """kind: 'fatal' 立即终止（401/402/404 等，重试无意义）
@@ -270,10 +270,23 @@ def check_unitypy():
 
 def install_unitypy():
     """pip install UnityPy。返回 (成功, 信息)。"""
+    return pip_install("UnityPy")
+
+def check_pillow():
+    """检测 Pillow 是否可用（背景图功能用，GUI 可选依赖）。"""
+    import importlib.util
+    return importlib.util.find_spec("PIL") is not None
+
+def install_pillow():
+    """pip install Pillow。返回 (成功, 信息)。"""
+    return pip_install("Pillow")
+
+def pip_install(pkg):
+    """pip install <pkg>。返回 (成功, 信息)。"""
     import subprocess
     for cmd in ([sys.executable if not getattr(sys, 'frozen', False) else "python",
-                 "-m", "pip", "install", "UnityPy"],
-                ["pip", "install", "UnityPy"]):
+                 "-m", "pip", "install", pkg],
+                ["pip", "install", pkg]):
         try:
             r = subprocess.run(cmd, capture_output=True, text=True,
                                encoding="utf-8", errors="replace", timeout=300)

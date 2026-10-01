@@ -49,7 +49,8 @@ The window is organized into tabs:
    window: the engine is auto-detected (badge shown), then a guided flow:
    ② Extract text → ③ Translate → ④ Apply to game. A live table lists every
    supported engine (and detected-but-unsupported ones with guidance)
-3. **⚙ Settings** — translation API configuration (saved to local `.env`)
+3. **⚙ Settings** — translation API configuration + custom background
+   image for the drop card (needs Pillow, auto-install prompt; `MT_BG`)
 
 A **dark / light theme** toggle (☀/🌙, top-right) is persisted to `.env`
 (`MT_THEME`); dark is the default. After translation finishes, OmniTrans prompts
