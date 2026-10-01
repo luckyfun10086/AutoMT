@@ -286,6 +286,24 @@ python unity_apply.py <游戏目录> <游戏名>_extracted_translated.json
 > 只想补漏的话，可在 `<游戏名>_extracted.json` 里删掉已翻条目再走管线。Unity
 > Localization 游戏的译文写在原语言表内（游戏选该语言显示译文）。
 
+## MTool 互操作
+
+`mtool_export.py` 把 OmniTrans 译文转成 MTool 的 `ManualTransFile.json`
+（运行时挂载格式）——格式本就同构，导出器追加的是**键形态变体**，让 MTool
+运行时拦截的键能对上：行拆分条目（选项/短行）、行首控制码剥离、全码剥离。
+多出的键无害（MTool 对未命中的键回落显示原文）。
+
+```
+python mtool_export.py <游戏名>_extracted_translated.json --dir <游戏目录>
+```
+
+GUI 游戏页有 **📤 导出 MTool 用 json** 按钮做同样的事。对照真实 MTool 导出
+实测，变体把键覆盖率稳定拉高一截（如 MTool 键 19.1%→23.7%，纯文本键
+20.3%→25.2%）——MTool 的运行时字典累积了碎片/数字/版本漂移，静态提取无法
+全部对上。对 OmniTrans 支持静态回写的引擎，「④ 导入游戏」永远是 100%；
+MTool 路径的最大价值在于**我们只识别、不支持的引擎**（Siglus、AliceSoft、
+ExHIBIT、Wolf、EXSTIA…）：用 MTool 导出未翻译文本 → 这里翻 → 文件放回。
+
 ## 命令行三步流程（与 GUI 等价）
 
 ```

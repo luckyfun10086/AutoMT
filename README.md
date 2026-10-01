@@ -338,6 +338,29 @@ re-extraction found every marker back).
 > games the translation is written into the source-language table (select that
 > language in-game to see it).
 
+## MTool interop
+
+`mtool_export.py` converts an OmniTrans translation into a MTool
+`ManualTransFile.json` (runtime-overlay format) — the output format is
+identical; what the exporter adds are **key-form variants** so MTool's
+runtime-intercepted keys can match: line-split entries (choices/short lines),
+leading-control-code-stripped, and all-codes-stripped forms. Extra keys are
+harmless (MTool falls back to the original text for unmatched keys).
+
+```
+python mtool_export.py <game>_extracted_translated.json --dir <game-folder>
+```
+
+The GUI's Game tab has an **📤 Export for MTool** button doing the same.
+Measured against real MTool exports, variants raise key coverage by a
+stable margin (e.g. 19.1%→23.7% of MTool keys, 20.3%→25.2% of text-only
+keys) — MTool's runtime dictionary accumulates fragments/numbers/version
+drift that static extraction can't match. For engines OmniTrans writes
+back directly, the static ④ Apply is always 100%; the MTool path is most
+valuable for engines we detect but don't support (Siglus, AliceSoft,
+ExHIBIT, Wolf, EXSTIA…): export untranslated text from MTool, translate
+it here, put the file back.
+
 ## CLI (equivalent to the GUI)
 
 ```

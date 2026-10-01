@@ -123,6 +123,13 @@ S = {
         "rv_edit_t": "修改译文",
         "rv_orig": "原文（只读）", "rv_new": "译文（可编辑）",
         "rv_ok": "保存此条", "rv_cancel": "取消",
+        # ---- MTool 导出 ----
+        "g_mtool": "📤 导出 MTool 用 json",
+        "g_mtool_no": "未找到已翻译的 json（先完成翻译）",
+        "g_mtool_ok": ("已导出 {} 键（含形态变体）→ {}\n\n"
+                       "MTool 用法：文件已在游戏目录且名为 ManualTransFile.json，\n"
+                       "用「与工具一同启动.bat」启动游戏即可加载。"),
+        "g_mtool_nogame": "未识别游戏目录——将导出到译文同目录",
     },
     "en": {
         "title": "OmniTrans — One-click Game Translator",
@@ -214,6 +221,13 @@ S = {
         "rv_edit_t": "Edit translation",
         "rv_orig": "Original (read-only)", "rv_new": "Translation (editable)",
         "rv_ok": "Save entry", "rv_cancel": "Cancel",
+        # ---- MTool export ----
+        "g_mtool": "📤 Export for MTool",
+        "g_mtool_no": "No translated json found (finish a translation first)",
+        "g_mtool_ok": ("Exported {} keys (with form variants) → {}\n\n"
+                       "For MTool: keep the file in the game folder as ManualTransFile.json\n"
+                       "and launch via the MTool launcher bat."),
+        "g_mtool_nogame": "No game folder detected — exporting next to the json",
     },
 }
 
@@ -1280,6 +1294,9 @@ class App:
         self.apply_btn = ttk.Button(gbtns, text=self.T("g_apply"),
                                     command=self.apply_to_game, state="disabled")
         self.apply_btn.pack(side="left", padx=8)
+        self.mtool_btn = ttk.Button(gbtns, text=self.T("g_mtool"),
+                                    command=self.export_mtool)
+        self.mtool_btn.pack(side="left", padx=8)
         self.g_note_lbl = ttk.Label(t2, text=self.T("g_backup_note"), style="Hint.TLabel",
                                     wraplength=760, justify="left")
         self.g_note_lbl.pack(anchor="w", pady=(2, 6))
@@ -1510,6 +1527,7 @@ class App:
         self.g_extract_btn.config(text=self.T("g_extract"))
         self.g_translate_btn.config(text=self.T("g_translate"))
         self.apply_btn.config(text=self.T("g_apply"))
+        self.mtool_btn.config(text=self.T("g_mtool"))
         eng_name = (mt_config.ENGINES.get(self.game_engine, {}).get("name")
                     if self.game_engine else None)
         self.g_engine_var.set(self.T("g_engine").format(
@@ -1762,6 +1780,33 @@ class App:
     def cancel_now(self):
         self.cancel.set()
         self.log(self.T("log_cancel"))
+
+    def export_mtool(self):
+        """把最新译文导出为游戏目录下的 ManualTransFile.json（MTool 挂载用）"""
+        import glob as g, subprocess as sp
+        base = mt_config.base_dir()
+        cands = sorted(g.glob(os.path.join(base, "*_translated.json")),
+                       key=os.path.getmtime, reverse=True)
+        if not cands:
+            messagebox.showinfo("Info", self.T("g_mtool_no"))
+            return
+        trfile = cands[0]
+        args = [sys.executable, os.path.join(base, "mtool_export.py"), trfile]
+        if self.game_path and os.path.isdir(self.game_path):
+            args += ["--dir", self.game_path]
+        else:
+            self.log("[mtool] " + self.T("g_mtool_nogame"))
+        r = sp.run(args, capture_output=True, text=True, encoding="utf-8",
+                   errors="replace", cwd=base)
+        self.log((r.stdout or "").strip())
+        if r.returncode != 0:
+            messagebox.showerror(self.T("error"), (r.stderr or "")[-400:])
+            return
+        import re as _re
+        m = _re.search(r"导出 (\d+) 键.*?→ (.+)", r.stdout or "")
+        if m:
+            messagebox.showinfo(self.T("g_mtool"),
+                                self.T("g_mtool_ok").format(m.group(1), m.group(2)))
 
     def apply_to_game(self):
         """点击「导入游戏」按钮：找译文 json + 游戏路径，运行对应 apply 脚本"""
