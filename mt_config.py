@@ -294,6 +294,10 @@ def _det_nscripter(game_dir, files):
     # NScripter：nscript.dat / *.nsa
     return "nscript.dat" in files or _has_ext(files, ".nsa")
 
+def _det_exstia(game_dir, files):
+    # Liar-soft 系 EXSTIA：_CONFIG.MED / install.dat
+    return "_CONFIG.MED" in files or _has_ext(files, ".med")
+
 ENGINES = {
     # ---- 已支持（提供 extract/apply 全链路） ----
     "rpg_mvmz":   {"name": "RPG Maker MV/MZ", "supported": True,
@@ -328,11 +332,14 @@ ENGINES = {
                    "reason": "暂不支持（.wolf 封包格式）。请使用 MTool 或 WolfTrans。"},
     "nscripter":  {"name": "NScripter", "supported": False, "detect": _det_nscripter,
                    "reason": "暂不支持（nscript.dat 加密封包）。可用 NSDEC 解包后翻译，或使用 MTool。"},
+    "exstia":    {"name": "EXSTIA (.MED)", "supported": False, "detect": _det_exstia,
+                   "reason": "暂不支持（Liar-soft 私有 .MED/install.dat 格式）。请使用 MTool 运行时翻译。"},
 }
 
 # 检测顺序：最具体的签名在前（避免 Unity 的 *_Data 等宽泛规则抢跑）
-_DETECT_ORDER = ["exhibit", "siglus", "nscripter", "kirikiri", "wolf", "rpg_vxace",
-                 "srpg_studio", "rpg_mvmz", "renpy", "tyrano", "alice", "unity"]
+_DETECT_ORDER = ["exhibit", "siglus", "nscripter", "exstia", "kirikiri", "wolf",
+                 "rpg_vxace", "srpg_studio", "rpg_mvmz", "renpy", "tyrano",
+                 "alice", "unity"]
 
 def detect_engine(path):
     """传入游戏目录或 exe 路径，返回 (engine_key, display_name, supported, reason)"""

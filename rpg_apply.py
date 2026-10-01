@@ -77,6 +77,8 @@ def main():
         d = json.load(open(f, encoding="utf-8"))
         changed = False
         if os.path.basename(f).startswith("Map"):
+            if not isinstance(d, dict):     # 个别汉化版会把 Map 文件改写为数组等
+                continue
             dn = d.get("displayName")
             if isinstance(dn, str) and dn.strip() and tr.get(dn, "").strip():
                 d["displayName"] = tr[dn]
@@ -90,13 +92,16 @@ def main():
                     apply_to_list(pg.get("list", []), tr)
                     changed = changed or (APPLIED["n"] + SKIPPED["n"] > before)
         else:
+            if not isinstance(d, list):    # 结构异常的 CommonEvents/Troops 跳过
+                continue
             for item in d:
-                if not item:
+                if not item or not isinstance(item, dict):
                     continue
                 if "list" in item:
                     apply_to_list(item["list"], tr)
                 for pg in item.get("pages", []):
-                    apply_to_list(pg.get("list", []), tr)
+                    if isinstance(pg, dict):
+                        apply_to_list(pg.get("list", []), tr)
             changed = True  # 简化：统一重写（内容校验由 json 往返保证）
         if changed:
             shutil.copy2(f, os.path.join(backup, os.path.basename(f)))
