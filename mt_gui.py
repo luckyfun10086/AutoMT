@@ -234,6 +234,8 @@ class Pipe:
         self.fallback_endpoint = (fallback_endpoint or "").strip() or mt_config.DEFAULT_ENDPOINT
         self.policy_skips = 0
         self.fallback_saved = 0
+        self.ai_degraded = 0
+        self._no_ctx = False
         self.L = S[lang if lang in S else "zh"]
 
     def load_names(self):
@@ -426,6 +428,8 @@ class Pipe:
                 if done % 10 == 0 or done >= total:
                     self._save(masked)
                     self.cb("trans", done, total, self._eta(t0, done, total))
+        elif self.api_type == "openai":
+            self._translate_ai_batch(masked, keys, t0)
         else:
             B = 8
             gi = 0
@@ -450,6 +454,86 @@ class Pipe:
         self._save(masked)
         self.log(self.L["log_trans_ok"].format(done, (time.time() - t0) / 60))
         return masked
+
+    # ---------- AI 批量模式：N 条打包 + 上下文注入 + 分级降级 ----------
+    def _ctx_for(self, idx, keys):
+        """上下文：同文件顺序的前后各 2 条（掩码态原文），仅供模型参考。"""
+        if self._no_ctx:
+            return ""
+        parts = []
+        for j in (idx - 2, idx - 1):
+            if j >= 0:
+                parts.append(keys[j][:120])
+        pre = parts
+        post = []
+        for j in (idx + 1, idx + 2):
+            if j < len(keys):
+                post.append(keys[j][:120])
+        ctx = ""
+        if pre:
+            ctx += "前文 prev:\n" + "\n".join(pre) + "\n"
+        if post:
+            ctx += "后文 next:\n" + "\n".join(post)
+        return ctx[:600]
+
+    def _ai_group(self, group, ctxs, depth=0):
+        """一组批量翻译：结构错误先重试，仍失败则半组递归，最终逐条。"""
+        for attempt in range(3):
+            if self.cancel.is_set():
+                raise Cancel()
+            try:
+                return mt_config.translate_batch_openai(
+                    group, self.sl, self.tl, self.endpoint, ctxs=ctxs,
+                    api_key=self.api_key, api_header=self.api_header,
+                    model=self.model)
+            except Cancel:
+                raise
+            except mt_config.ApiError as e:
+                if e.kind == "fatal":
+                    raise
+                if e.kind == "skip":
+                    # 整组被拦 → 降级逐条，由 mt_one 精确拦敏感的那条（计数在彼处）
+                    return [self.mt_one(g) for g in group]
+                if attempt == 2:
+                    break
+                time.sleep(3 + 3 * attempt + random.random() * 2)
+            except ValueError:
+                if attempt == 2:
+                    break
+                time.sleep(1 + attempt)
+        if len(group) > 2 and depth < 3:
+            h = len(group) // 2
+            return (self._ai_group(group[:h], ctxs[:h], depth + 1)
+                    + self._ai_group(group[h:], ctxs[h:], depth + 1))
+        self.ai_degraded += len(group)
+        return [self.mt_one(g) for g in group]
+
+    def _translate_ai_batch(self, masked, keys, t0):
+        total = len(keys)
+        if total == 0:
+            return
+        env = mt_config.load_env()
+        self._no_ctx = env.get("MT_CONTEXT", "1") == "0"
+        self.ai_degraded = 0
+        pos = {k: i for i, k in enumerate(keys)}
+        B = 24
+        gi = 0
+        while gi < len(keys):
+            if self.cancel.is_set():
+                raise Cancel()
+            group = keys[gi:gi + B]
+            while len(group) > 1 and len("".join(group)) > 9000:
+                group = group[:max(1, len(group) // 2)]
+            ctxs = [self._ctx_for(pos[k], keys) for k in group]
+            vals = self._ai_group(group, ctxs)
+            for k, v in zip(group, vals):
+                masked[k] = v
+            gi += len(group)
+            self._save(masked)
+            self.cb("trans", gi, total, self._eta(t0, gi, total))
+            time.sleep(0.4 + random.random() * 0.3)
+        if self.ai_degraded:
+            self.log(f"[ai-batch] {self.ai_degraded} 条降级为逐条翻译（模型结构输出不符）")
 
     def _save(self, masked):
         json.dump(masked, open(os.path.join(self.work, "masked.json"), "w", encoding="utf-8"),

@@ -21,7 +21,7 @@ DEFAULT_ENDPOINT = ("https://clients5.google.com/translate_a/t"
 
 ENV_KEYS = ("MT_ENDPOINT", "MT_API_KEY", "MT_API_HEADER", "MT_SL", "MT_TL",
             "MT_AUTO_NAMES", "MT_LANG", "MT_API_TYPE", "MT_MODEL", "MT_FALLBACK",
-            "MT_THEME", "MT_BG")
+            "MT_THEME", "MT_BG", "MT_CONTEXT")
 
 class ApiError(Exception):
     """kind: 'fatal' 立即终止（401/402/404 等，重试无意义）
@@ -118,6 +118,114 @@ def load_loose_json(path):
     txt = re.sub(r"(?m)^(.*?\"(?:[^\"\\\\]|\\\\.)*\")(\s*,?\s*)//[^\n]*$",
                  r"\1\2", txt)                       # 行尾注释（字符串后）
     return json.loads(txt, strict=False)             # strict=False: 允许字符串内的原始控制字符
+
+
+# ---------- AI 批量翻译（OpenAI 兼容；N 条打包 + 等长校验） ----------
+AI_BATCH_SYS = (
+    "You are a professional game localizer. Translate each item's \"text\" from "
+    "{sl} to {tl}.\n"
+    "STRICT RULES:\n"
+    "- Return ONLY a JSON object: {{\"items\":[{{\"id\":<same id>,\"zh\":\"<translation>\"}}]}}\n"
+    "- Every input id must appear exactly once. Never add, drop, merge or reorder items.\n"
+    "- Keep placeholder tokens like 〔T1a2b3c4〕 EXACTLY unchanged and in their positions.\n"
+    "- Preserve line breaks and trailing quotation marks such as 」』\".\n"
+    "- If an item has a \"ctx\" field, it is surrounding dialogue provided as context "
+    "ONLY — never translate it and never include it in your output."
+)
+
+
+def _extract_json_items(content, n):
+    """从模型回复中提取 n 条译文（按 id 对齐）。失败抛 ValueError。"""
+    s = content.strip()
+    s = re.sub(r"^```(?:json)?\s*|\s*```$", "", s)          # 去 markdown 围栏
+    if s.startswith("[") or s.startswith("{"):
+        try:
+            d = json.loads(s)
+        except Exception:
+            # 宽容：截取首个 { 到末个 }
+            i, j = s.find("{"), s.rfind("}")
+            k, l = s.find("["), s.rfind("]")
+            lo, hi = max(i, k), min(j if j >= 0 else len(s), l if l >= 0 else len(s))
+            if lo < 0 or hi <= lo:
+                raise ValueError("no JSON found")
+            d = json.loads(s[lo:hi + 1])
+    else:
+        raise ValueError("not JSON")
+    items = None
+    if isinstance(d, dict):
+        for key in ("items", "translations", "data", "results"):
+            if isinstance(d.get(key), list):
+                items = d[key]
+                break
+    elif isinstance(d, list):
+        items = d
+    if not items:
+        raise ValueError("no items array")
+    out = {}
+    for it in items:
+        if isinstance(it, dict):
+            idx = it.get("id")
+            txt = it.get("zh", it.get("translation", it.get("text", it.get("译文"))))
+            if isinstance(idx, int) and isinstance(txt, str):
+                out[idx] = txt
+        elif isinstance(it, str) and len(items) == n:
+            out[len(out) + 1] = it
+    if len(out) != n or set(out) != set(range(1, n + 1)):
+        raise ValueError(f"item count mismatch {len(out)}/{n}")
+    return [out[i] for i in range(1, n + 1)]
+
+
+def translate_batch_openai(texts, sl, tl, endpoint, ctxs=None,
+                           api_key=None, api_header=None, model=None,
+                           timeout=180, opener=None):
+    """AI 批量翻译：N 条打包为带 id 的 JSON 请求，返回与输入等长的译文列表。
+    结构不符抛 ValueError（调用方降级）；网络/鉴权错误统一 ApiError。"""
+    import urllib.request
+    import urllib.error
+    opener = opener or urllib.request.urlopen
+    if not (endpoint or "").strip():
+        raise ApiError("fatal", "AI 翻译需要填写完整接口地址 / URL is empty")
+    items = []
+    for i, t in enumerate(texts, 1):
+        it = {"id": i, "text": t}
+        if ctxs and ctxs[i - 1]:
+            it["ctx"] = ctxs[i - 1]
+        items.append(it)
+    body = json.dumps({
+        "model": model or "gpt-4o-mini",
+        "messages": [
+            {"role": "system",
+             "content": AI_BATCH_SYS.format(sl=sl, tl=tl)},
+            {"role": "user",
+             "content": json.dumps({"items": items}, ensure_ascii=False)},
+        ],
+        "temperature": 0.3,
+    }).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        h = (api_header or "Authorization").strip() or "Authorization"
+        headers[h] = f"Bearer {api_key}" if h.lower() == "authorization" else api_key
+    req = urllib.request.Request(endpoint, data=body, headers=headers, method="POST")
+    try:
+        with opener(req, timeout=timeout) as r:
+            content = parse_response(r.read().decode("utf-8", "replace"))
+        return _extract_json_items(content, len(texts))
+    except urllib.error.HTTPError as e:
+        try:
+            b = e.read().decode("utf-8", "replace")
+        except Exception:
+            b = ""
+        kind, msg = classify_error(e, b)
+        raise ApiError(kind, msg) from None
+    except urllib.error.URLError as e:
+        raise ApiError("retry", f"网络错误（{e.reason}）——将重试 / Network error, retrying") from None
+    except ApiError:
+        raise
+    except ValueError:
+        raise
+    except Exception as e:
+        kind, msg = classify_error(e)
+        raise ApiError(kind, msg) from None
 
 # ---------- 引擎注册表（识别/提取/回写/依赖 统一登记，GUI 与 CLI 共用） ----------
 # 字段：name 显示名 / supported 是否支持静态提取回写 / extractor+applier 脚本 /

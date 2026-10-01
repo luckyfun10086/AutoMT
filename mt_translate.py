@@ -96,11 +96,60 @@ def mt_batch(qs, tries=5):
                 raise
             time.sleep(3 + 3 * a + random.random() * 2)
 
+def ai_batch(qs, ctxs, tries=3):
+    """AI 模式批量：N 条打包。结构不符先重试再半组递归，最终逐条。"""
+    for a in range(tries):
+        try:
+            return mt_config.translate_batch_openai(
+                qs, SL, TL, ENDPOINT, ctxs=ctxs,
+                api_key=ENV.get("MT_API_KEY"), api_header=ENV.get("MT_API_HEADER"),
+                model=MODEL)
+        except mt_config.ApiError as e:
+            if e.kind == "fatal":
+                print("\n[错误] " + e.args[0])
+                sys.exit(2)
+            if e.kind == "skip":
+                return [mt(q) for q in qs]      # 整组被拦 → 逐条定位敏感条
+            if a == tries - 1:
+                raise
+            time.sleep(3 + 3 * a)
+        except ValueError:
+            if a == tries - 1:
+                break
+            time.sleep(1 + a)
+    if len(qs) > 2:
+        h = len(qs) // 2
+        return ai_batch(qs[:h], ctxs[:h]) + ai_batch(qs[h:], ctxs[h:])
+    return [mt(q) for q in qs]
+
+
+def ctx_for(keys_pos, keys, k):
+    """上下文：同文件顺序前后各 2 条（MT_CONTEXT=0 关闭）"""
+    if ENV.get("MT_CONTEXT", "1") == "0":
+        return ""
+    i = keys_pos[k]
+    parts = []
+    for j in (i - 2, i - 1):
+        if j >= 0:
+            parts.append(keys[j][:120])
+    pre = parts
+    post = []
+    for j in (i + 1, i + 2):
+        if j < len(keys):
+            post.append(keys[j][:120])
+    ctx = ""
+    if pre:
+        ctx += "前文 prev:\n" + "\n".join(pre) + "\n"
+    if post:
+        ctx += "后文 next:\n" + "\n".join(post)
+    return ctx[:600]
+
+
 def main():
     data = json.load(open(IN, encoding="utf-8"))
     keys = [k for k, v in data.items() if not (isinstance(v, str) and v.strip())]
     total = len(keys)
-    print(f"待翻: {total} 条 ({'分段' if SEG else '批量'}模式)", flush=True)
+    print(f"待翻: {total} 条 ({'分段' if SEG else ('AI批量' if API_TYPE == 'openai' else '批量')}模式)", flush=True)
     t0 = time.time()
     done = 0
     if SEG:
@@ -119,6 +168,24 @@ def main():
                 json.dump(data, open(IN, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
                 rate = done / (time.time() - t0)
                 print(f"{done}/{total} ({rate:.1f}/s eta {(total-done)/rate/60:.0f}分)", flush=True)
+    elif API_TYPE == "openai":
+        keys_pos = {k: i for i, k in enumerate(keys)}
+        B = 24
+        gi = 0
+        while gi < len(keys):
+            group = keys[gi:gi + B]
+            while len(group) > 1 and len("".join(group)) > 9000:
+                group = group[:max(1, len(group) // 2)]
+            vals = ai_batch(group, [ctx_for(keys_pos, keys, k) for k in group])
+            for k, v in zip(group, vals):
+                data[k] = v
+            done += len(group)
+            gi += len(group)
+            json.dump(data, open(IN, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+            rate = done / max(time.time() - t0, 0.001)
+            eta = (total - done) / rate / 60
+            print(f"{done}/{total} ({rate:.1f}/s eta {eta:.0f}分)", flush=True)
+            time.sleep(0.4 + random.random() * 0.3)
     else:
         B = 8
         for gi in range(0, len(keys), B):
@@ -128,7 +195,7 @@ def main():
             try:
                 vals = mt_batch(group)
             except Exception:
-                vals = [mt([g]) if False else mt(g) for g in group]  # 逐条兜底
+                vals = [mt(g) for g in group]  # 逐条兜底
             for k, v in zip(group, vals):
                 data[k] = v
             done += len(group)
