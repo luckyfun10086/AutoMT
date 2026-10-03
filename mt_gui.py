@@ -678,6 +678,7 @@ DARK = {
     "log_bg": "#14161a", "log_fg": "#d4d7de",
     "btn_bg": "#2a2d35", "btn_fg": "#cdd2dc", "btn_active": "#33363f",
     "ok": "#34d399", "muted": "#8b93a3",
+    "err": "#f87171",
 }
 
 # 接口类型（语言中立标签）
@@ -1606,6 +1607,7 @@ class App:
             return
         self.g_extract_btn.config(state="disabled")
         self.stage_var.set(self.T("g_extracting"))
+        self.lbl_stage.config(foreground=self.pal["accent"])
         self._run_extractor(self.game_path, self.game_extract_script)
 
     def _check_and_install_unitypy(self):
@@ -1852,7 +1854,10 @@ class App:
             return
         self.log(f"[apply] 运行 {script} {game_path} {trfile}")
         self.stage_var.set("回写中… / Applying…")
+        self.lbl_stage.config(foreground=self.pal["accent"])
         self.bar["value"] = 50
+        for b in (self.apply_btn, self.mtool_btn, self.g_extract_btn):
+            b.config(state="disabled")
         def worker():
             import importlib.util, io as _io, glob as g
             captured = []
@@ -1978,7 +1983,10 @@ class App:
                     self.log(f"[applied] ✓ 翻译已导入游戏: {payload}")
                     self.library_mark_applied(payload)
                     self._set_drop_note("ok")
+                    self.lbl_stage.config(foreground=self.pal["ok"])
+                    self.apply_btn.config(state="normal")
                     self.g_extract_btn.config(state="normal")
+                    self.mtool_btn.config(state="normal")
                     messagebox.showinfo(
                         "Applied / 已导入",
                         f"翻译已成功导入游戏！\nTranslation applied successfully!\n\n"
@@ -1987,7 +1995,9 @@ class App:
                         f"其余引擎原文件已备份 .automt.bak）")
                 elif kind == "cancelled":
                     self.stage_var.set(self.T("cancelled"))
+                    self.lbl_stage.config(foreground=self.pal["hint"])
                     self.start_btn.config(state="normal")
+                    self.g_translate_btn.config(state="normal")
                     self.cancel_btn.config(state="disabled")
                     self.log(self.T("log_cancelled"))
                 elif kind == "extracted":
@@ -1996,11 +2006,18 @@ class App:
                     self.g_extract_btn.config(state="normal")
                     self.apply_btn.config(state="disabled")
                     self.stage_var.set(self.T("g_extracted").format(os.path.basename(payload)))
+                    self.lbl_stage.config(foreground=self.pal["ok"])
                     self.log(f"[extract] 提取完成，已加载: {payload}")
                     self.log("[hint] 点击「③ 开始翻译」继续；翻译完成会自动询问导入游戏")
                 elif kind == "error":
-                    self.stage_var.set(self.T("error"))
+                    self.stage_var.set("❌ " + self.T("error"))
+                    self.lbl_stage.config(foreground=self.pal["err"])
                     self.start_btn.config(state="normal")
+                    self.g_translate_btn.config(state="normal")
+                    self.g_extract_btn.config(state="normal")
+                    if self.game_path and self.apply_script:
+                        self.apply_btn.config(state="normal")
+                    self.mtool_btn.config(state="normal")
                     self.cancel_btn.config(state="disabled")
                     self.log(payload)
                     messagebox.showerror(self.T("error"), payload[:1500])
