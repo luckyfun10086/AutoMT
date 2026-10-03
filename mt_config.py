@@ -111,13 +111,42 @@ def translate_once(text, sl, tl, endpoint=None, api_key=None, api_header=None,
         kind, msg = classify_error(e)
         raise ApiError(kind, msg) from None
 
+def _strip_json_comments(txt):
+    """剥离 JSON 外层的 // 注释（整行/行尾），字符串内的 // 原样保留。
+
+    逐字符扫描维护 in-string 状态；游戏文本键完全可能以 "//" 开头
+    （如 Wolf 提取出的注释型台词），正则方案会误杀。
+    """
+    out, i, n = [], 0, len(txt)
+    in_str = False
+    while i < n:
+        c = txt[i]
+        if in_str:
+            out.append(c)
+            if c == "\\" and i + 1 < n:          # 转义序列（含 \"）整体保留
+                out.append(txt[i + 1])
+                i += 2
+                continue
+            if c == '"':
+                in_str = False
+            i += 1
+        elif c == '"':
+            in_str = True
+            out.append(c)
+            i += 1
+        elif c == "/" and txt.startswith("//", i):
+            j = txt.find("\n", i)
+            i = n if j < 0 else j                # 注释吃到行尾（保留 \n）
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
 def load_loose_json(path):
-    """加载 MTool 翻译文件（trs）：宽容处理 BOM、CRLF、整行/行尾 // 注释、控制字符。"""
+    """加载 MTool 翻译文件：宽容处理 BOM、CRLF、JSON 外层 // 注释、控制字符。"""
     txt = open(path, encoding="utf-8-sig", errors="replace").read()
-    txt = re.sub(r"(?m)^[ \t]*//.*$", "", txt)      # 整行注释
-    txt = re.sub(r"(?m)^(.*?\"(?:[^\"\\\\]|\\\\.)*\")(\s*,?\s*)//[^\n]*$",
-                 r"\1\2", txt)                       # 行尾注释（字符串后）
-    return json.loads(txt, strict=False)             # strict=False: 允许字符串内的原始控制字符
+    return json.loads(_strip_json_comments(txt), strict=False)   # strict=False: 允许字符串内的原始控制字符
 
 
 # ---------- AI 批量翻译（OpenAI 兼容；N 条打包 + 等长校验） ----------
