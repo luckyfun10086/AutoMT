@@ -1460,7 +1460,11 @@ class App:
         # ---- 全局拖放 ----
         if HAS_DND:
             self.root.drop_target_register(DND_FILES)
-            self.root.dnd_bind("<<Drop>>", lambda e: self.on_drop(self._dnd_clean(e.data)))
+            self.root.dnd_bind("<<Drop>>", self._on_dnd_drop)
+
+    def _on_dnd_drop(self, event):
+        """tkdnd <<Drop>> 回调（测试注入点：FakeEvent(data=…) 直调即全链路）"""
+        self.on_drop(self._dnd_clean(event.data))
 
     # ---- 语言切换 ----
     def toggle_lang(self):
@@ -1684,9 +1688,10 @@ class App:
                     pass
                 for line in captured[-6:]:
                     self.log(f"  | {line}")
-                # 找最新生成的 *_extracted.json
+                # 找最新生成的提取产物（引擎命名不一：<game>_extracted.json /
+                # game.extracted.json / <game>.extracted.json，统配 [_.]）
                 import glob as g
-                cands = sorted(g.glob(os.path.join(base, "*_extracted*.json")),
+                cands = sorted(g.glob(os.path.join(base, "*[_.]extracted*.json")),
                                key=os.path.getmtime, reverse=True)
                 if cands:
                     newest = cands[0]
