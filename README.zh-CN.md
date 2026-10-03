@@ -118,7 +118,8 @@ pyinstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2
   --add-data "engines/renpy_extract.py;engines/" --add-data "engines/renpy_apply.py;engines/" 
   --add-data "engines/renpy_rpyc.py;engines/" 
   --add-data "engines/tyrano_extract.py;engines/" --add-data "engines/tyrano_apply.py;engines/" 
-  --add-data "engines/unity_extract.py;engines/" --add-data "engines/unity_apply.py;engines/" 
+  --add-data "engines/unity_extract.py;engines/" --add-data "engines/unity_apply.py;engines/"
+  --add-data "engines/wolf_extract.py;engines/" --add-data "engines/wolf_apply.py;engines/"
   --add-data "engines/mtool_export.py;engines/" mt_gui.py
 ```
 
@@ -160,6 +161,7 @@ Bob               不写 = 号则保持英文原样
 
 | 引擎 | 数据位置 | 支持状态 |
 |------|----------|----------|
+| **Wolf RPG Editor**（ウディタ） | `Data.wolf` / `Data/` | ✅ 支持——桥接 UberWolf+WolfTL（MIT，自动下载）；Wolf 3.x 可完整回写中文，2.x 为 CP932 存储（中文会丢，走 MTool 导出路径） |
 | RPG Maker **MZ** | `data/` | ✅ 完整支持 |
 | RPG Maker **MV** | `www/data/`（部分发行版在 `data/`） | ✅ 完整支持 |
 | **RPG Maker VX Ace / VX / XP** | `Data/*.rvdata2`（VX `.rvdata` / XP `.rxdata`） | ✅ 完整支持——纯 Python Ruby Marshal 4.8 编解码器，字节级还原 |
@@ -170,7 +172,7 @@ Bob               不写 = 号则保持英文原样
 | **Unity**（TextAsset 剧本 / MonoBehaviour 内嵌文本 / Addressables・Localization 字符串表 Bundle） | `*_Data` + `StreamingAssets/**/*.bundle` | ✅ 支持（依赖 UnityPy，GUI 首次使用自动弹窗安装；不支持编译进 DLL 的字符串） |
 
 可识别但暂不支持：SiglusEngine（Key 社）、AliceSoft（.ain）、ExHIBIT、
-Wolf RPG、NScripter——拖入即提示引擎名称与替代方案。
+NScripter、EXSTIA——拖入即提示引擎名称与替代方案。
 
 MV/MZ 的全部游戏文本都是明文 JSON（`Map*.json`、`CommonEvents.json`、
 `Troops.json` 等），OmniTrans 直接读写，全程无需第三方工具。
@@ -253,6 +255,25 @@ python engines/tyrano_apply.py <游戏目录> <游戏名>_extracted_translated.j
 
 提取 `[标签]` 外文本段（跳过注释/标签行/说话人行/macro·eval 块，`[link]` 选项文本
 包含），回写按段精确替换；原文件逐个备份为 `*.automt.bak`。
+
+### Wolf RPG Editor（ウディタ）游戏
+
+桥接两个 MIT 工具（首次运行自动下载到 `bin/wolf/`）：
+[UberWolf](https://github.com/Sinflower/UberWolf) 解包 `.wolf` 封包（原包改名
+`*.wolf.automt.bak`，引擎自动改读明文 `Data/` 目录——无需重打包），
+[WolfTL](https://github.com/Sinflower/WolfTL) 负责事件/数据库二进制与 JSON 互转。
+
+```
+python engines/wolf_extract.py <游戏目录>   # 解包 → dump → <游戏名>_extracted.json
+python mt_clean.py <游戏名>_extracted.json && python mt_translate.py && python mt_apply.py <游戏名>_extracted.json
+python engines/wolf_apply.py <游戏目录> <游戏名>_extracted_translated.json
+```
+
+提取 Message/Choices 指令与数据库字段值；标签/事件名等逻辑引用绝不改动。
+回写后自动重新解析验证，若译文字符被存档编码丢弃会明确警告——
+**Wolf 3.x 文本存储支持中文、全链路可用；Wolf 2.x 为 CP932，简体字会被丢弃**
+（日文兼容译文仍可回写）。2.x 的中文汉化请改用 MTool 导出路径。
+已在官方 3.728 基本系统（全链路往返）与真实 2.x 封包游戏（Misao，548 条）上验证。
 
 ### SRPG Studio 游戏专用流程
 
@@ -367,7 +388,8 @@ engines/             各引擎提取/回写 + 二进制编解码
   rpg_*.py           RPG Maker MV/MZ          rvdata/rva_*.py   VX Ace/VX/XP（Ruby Marshal）
   krkr_*.py          Kirikiri（.xp3）          renpy_*.py        Ren'Py（rpyc/rpa + tl）
   tyrano_*.py        TyranoScript             srpg_*.py         SRPG Studio
-  unity_*.py         Unity                     mtool_export.py   MTool 兼容导出
+  unity_*.py         Unity                     wolf_*.py         Wolf RPG（UberWolf/WolfTL）
+  mtool_export.py    MTool 兼容导出
 tests/               11 套自测（任意目录可跑）
 names.example.txt    人名表模板
 ```

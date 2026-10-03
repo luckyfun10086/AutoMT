@@ -81,7 +81,8 @@ pyinstaller --onefile --windowed --name OmniTrans --collect-all tkinterdnd2
   --add-data "engines/renpy_extract.py;engines/" --add-data "engines/renpy_apply.py;engines/" 
   --add-data "engines/renpy_rpyc.py;engines/" 
   --add-data "engines/tyrano_extract.py;engines/" --add-data "engines/tyrano_apply.py;engines/" 
-  --add-data "engines/unity_extract.py;engines/" --add-data "engines/unity_apply.py;engines/" 
+  --add-data "engines/unity_extract.py;engines/" --add-data "engines/unity_apply.py;engines/"
+  --add-data "engines/wolf_extract.py;engines/" --add-data "engines/wolf_apply.py;engines/"
   --add-data "engines/mtool_export.py;engines/" mt_gui.py
 ```
 
@@ -189,6 +190,7 @@ work in every mode.
 
 | Engine | Data location | Status |
 |--------|---------------|--------|
+| **Wolf RPG Editor** (ウディタ) | `Data.wolf` / `Data/` | ✅ supported — bridges UberWolf+WolfTL (MIT, auto-downloaded); Wolf 3.x fully writable, 2.x is CP932 (Chinese dropped → use the MTool export path) |
 | RPG Maker **MZ** | `data/` | ✅ fully supported |
 | RPG Maker **MV** | `www/data/` (or `data/` in some distributions) | ✅ fully supported |
 | **RPG Maker VX Ace / VX / XP** | `Data/*.rvdata2` (VX: `.rvdata`, XP: `.rxdata`) | ✅ fully supported — pure-Python Ruby Marshal 4.8 codec, byte-exact round-trip |
@@ -199,7 +201,7 @@ work in every mode.
 | **Unity** (TextAsset scenarios / MonoBehaviour strings / Addressables & Localization bundles) | `*_Data` + `StreamingAssets/**/*.bundle` | ✅ supported (needs UnityPy — the GUI offers to install it on first use; strings compiled into DLLs are out of scope) |
 
 Detected but not (yet) supported: SiglusEngine (Key), AliceSoft (.ain), ExHIBIT,
-Wolf RPG, NScripter — dropping such a folder tells you which engine it is and
+NScripter, EXSTIA — dropping such a folder tells you which engine it is and
 what to use instead.
 
 MV/MZ store all game text as plain JSON (`Map*.json`, `CommonEvents.json`,
@@ -298,6 +300,30 @@ Text segments outside `[tags]` are extracted (comments/labels/speaker
 lines/macro & eval blocks skipped, `[link]` choice text included) and written
 back with exact in-line replacement; each original file is backed up as
 `*.automt.bak`.
+
+### Wolf RPG Editor (ウディタ) games
+
+Bridges two MIT tools (auto-downloaded to `bin/wolf/` on first run):
+[UberWolf](https://github.com/Sinflower/UberWolf) unpacks `.wolf` archives
+(originals renamed `*.wolf.automt.bak`; the engine then reads the plain
+`Data/` folder — no repacking needed) and
+[WolfTL](https://github.com/Sinflower/WolfTL) converts the event/database
+binaries to JSON and back.
+
+```
+python engines/wolf_extract.py <game-folder>   # unpack → dump → <game>_extracted.json
+python mt_clean.py <game>_extracted.json && python mt_translate.py && python mt_apply.py <game>_extracted.json
+python engines/wolf_apply.py <game-folder> <game>_extracted_translated.json
+```
+
+Extracts Message/Choices commands plus database names/values; labels and
+event-name references are never touched. Apply verifies the patched data by
+re-parsing it and warns if translation characters were dropped by the
+archive's encoding — **Wolf 3.x accepts Chinese end-to-end; Wolf 2.x is
+CP932 and drops Simplified Chinese characters** (Japanese-compatible
+translations still apply). For 2.x Chinese localization use the MTool
+export path instead. Verified on the official 3.728 base system (full
+round-trip) and a real packed 2.x game (Misao, 548 strings).
 
 ### SRPG Studio games
 
@@ -427,7 +453,8 @@ engines/             one extractor/applier pair per engine + binary codecs
   rpg_*.py           RPG Maker MV/MZ          rvdata/rva_*.py   VX Ace/VX/XP (Ruby Marshal)
   krkr_*.py          Kirikiri (.xp3)          renpy_*.py        Ren'Py (rpyc/rpa + tl)
   tyrano_*.py        TyranoScript             srpg_*.py         SRPG Studio
-  unity_*.py         Unity                     mtool_export.py   MTool-compatible export
+  unity_*.py         Unity                     wolf_*.py         Wolf RPG (UberWolf/WolfTL)
+  mtool_export.py    MTool-compatible export
 tests/               11 self-test suites (run from anywhere)
 names.example.txt    names.txt template
 ```
